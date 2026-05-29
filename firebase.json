@@ -35,6 +35,7 @@
     "singleProjectMode": true
   },
   "hosting": {
+    "site": "bounty",
     "public": "dist/bounty/browser",
     "ignore": [
       "firebase.json",

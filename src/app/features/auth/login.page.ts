@@ -18,10 +18,6 @@ import { AuthService } from '../../core/auth.service';
           Continue with Google
         </button>
         <div style="height: 10px;"></div>
-        <button class="btn full dark" [disabled]="busy()" (click)="signInApple()">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="white"><path d="M17.5 12.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2-3.9-2.1-1.7-.2-3.2 1-4.1 1-.8 0-2.1-1-3.5-1-1.8 0-3.5 1.1-4.4 2.7-1.9 3.3-.5 8.1 1.4 10.8.9 1.3 2 2.7 3.4 2.7 1.4-.1 1.9-.9 3.5-.9s2.1.9 3.5.9c1.5 0 2.4-1.3 3.3-2.6 1-1.5 1.5-3 1.5-3-.1 0-2.9-1.1-3-4.4zM14.6 4.3c.7-.9 1.2-2.1 1.1-3.3-1 0-2.3.7-3 1.5-.7.8-1.3 2-1.1 3.2 1.1.1 2.3-.5 3-1.4z"/></svg>
-          Continue with Apple
-        </button>
         @if (error()) {
           <div class="err">{{ error() }}</div>
         }
