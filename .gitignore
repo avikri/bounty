@@ -69,6 +69,15 @@ node_modules/
 # Angular environment files (contain Firebase config - use environment.example.ts as template)
 src/environments/environment.ts
 src/environments/environment.development.ts
+# NOTE: environment.e2e.ts is intentionally committed — it only targets the
+# emulators (useEmulators: true) with a non-secret placeholder apiKey, and the
+# `e2e` build/Playwright suite depend on it existing.
+
+# Playwright E2E artifacts
+/test-results/
+/playwright-report/
+/blob-report/
+.playwright/
 
 # Angular build cache
 .angular/

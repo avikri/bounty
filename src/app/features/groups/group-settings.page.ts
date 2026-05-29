@@ -47,9 +47,9 @@ import { ToastService } from '../../shared/toast.service';
         <div class="section">
           <div class="kicker">Invite code</div>
           <div class="code-row">
-            <code>{{ g.inviteCode }}</code>
+            <code data-testid="invite-code">{{ g.inviteCode }}</code>
             @if (canEdit()) {
-              <button class="btn ghost" (click)="regenCode()" [disabled]="busy()">Regenerate</button>
+              <button class="btn ghost" (click)="regenCode()" [disabled]="busy()" data-testid="regen-code">Regenerate</button>
             }
           </div>
           <div class="hint">Share this code, or the link below.</div>
@@ -59,18 +59,18 @@ import { ToastService } from '../../shared/toast.service';
         <div class="section">
           <div class="kicker">Members</div>
           @for (m of members(); track m.uid) {
-            <div class="member-row">
+            <div class="member-row" data-testid="member-row" [attr.data-uid]="m.uid">
               <app-avatar [initials]="m.initials" [variant]="m.avatarVariant" size="sm" />
               <div class="meat">
                 <div class="name">{{ m.displayName }} <span class="muted">(&#64;{{ m.handle }})</span></div>
                 <div class="sub">{{ m.points }} pts · {{ m.wins }}W / {{ m.losses }}L</div>
               </div>
-              <span class="role role-{{ m.role }}">{{ m.role }}</span>
+              <span class="role role-{{ m.role }}" data-testid="member-role">{{ m.role }}</span>
               @if (isOwner() && m.uid !== g.ownerId) {
                 @if (m.role === 'admin') {
-                  <button class="btn ghost sm" (click)="setRole(m.uid, 'member')" [disabled]="busy()">Demote</button>
+                  <button class="btn ghost sm" (click)="setRole(m.uid, 'member')" [disabled]="busy()" data-testid="demote">Demote</button>
                 } @else if (m.role === 'member') {
-                  <button class="btn ghost sm" (click)="setRole(m.uid, 'admin')" [disabled]="busy()">Promote</button>
+                  <button class="btn ghost sm" (click)="setRole(m.uid, 'admin')" [disabled]="busy()" data-testid="promote">Promote</button>
                 }
               }
             </div>

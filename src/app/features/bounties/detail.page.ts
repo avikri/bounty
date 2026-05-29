@@ -75,7 +75,7 @@ import { ToastService } from '../../shared/toast.service';
 
         @if (b.rejectionReason) {
           <div class="kicker" style="margin-top: 18px;">Rejection reason</div>
-          <div class="reason">{{ b.rejectionReason }}</div>
+          <div class="reason" data-testid="rejection-reason">{{ b.rejectionReason }}</div>
         }
 
         <div class="kicker" style="margin-top: 22px;">Activity</div>
@@ -99,20 +99,20 @@ import { ToastService } from '../../shared/toast.service';
         <div class="action-bar">
           @switch (cta()) {
             @case ('claim') {
-              <button class="btn full" (click)="claim()">Claim this bounty</button>
+              <button class="btn full" (click)="claim()" data-testid="cta-claim">Claim this bounty</button>
             }
             @case ('submit') {
-              <button class="btn full" (click)="goSubmit()">Submit proof</button>
+              <button class="btn full" (click)="goSubmit()" data-testid="cta-submit">Submit proof</button>
             }
             @case ('review') {
-              <button class="btn full" (click)="goReview()">Review submission</button>
+              <button class="btn full" (click)="goReview()" data-testid="cta-review">Review submission</button>
             }
             @case ('view') {
-              <button class="btn full ghost" disabled>{{ stateLabel() }}</button>
+              <button class="btn full ghost" disabled data-testid="cta-view">{{ stateLabel() }}</button>
             }
           }
           <div style="height: 8px;"></div>
-          <button class="btn full ghost" (click)="share()">Share</button>
+          <button class="btn full ghost" (click)="share()" data-testid="cta-share">Share</button>
         </div>
       </div>
     } @else {

@@ -21,23 +21,26 @@ interface DayGroup {
         <div>
           <h2>Inbox</h2>
           <div class="sub">
-            {{ unread() }} unread · {{ notifications().length }} total
+            <span data-testid="unread-count">{{ unread() }}</span> unread · {{ notifications().length }} total
           </div>
         </div>
         @if (unread() > 0) {
-          <button class="btn ghost sm" (click)="markAll()">Mark all read</button>
+          <button class="btn ghost sm" (click)="markAll()" data-testid="mark-all">Mark all read</button>
         }
       </div>
 
       @for (group of grouped(); track group.label) {
-        <div class="day-label">{{ group.label }}</div>
+        <div class="day-label" data-testid="day-label">{{ group.label }}</div>
         @for (n of group.items; track n.id) {
           <button
             class="notif"
             [class.unread]="!n.read"
             (click)="open(n)"
+            data-testid="notif"
+            [attr.data-kind]="n.kind"
+            [attr.data-read]="n.read"
           >
-            <span class="dot" [class]="'k-' + n.kind"></span>
+            <span class="dot" [class]="'k-' + n.kind" [attr.data-testid]="'dot-' + n.kind"></span>
             <div class="meat">
               <div class="row1">
                 <span class="title">{{ n.title }}</span>

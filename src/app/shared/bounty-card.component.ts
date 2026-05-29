@@ -13,7 +13,8 @@ import { IconComponent } from './icon.component';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink, AvatarComponent, StateBadgeComponent, CountdownPipe, RelativePipe, IconComponent],
   template: `
-    <a class="bounty-card" [class.muted]="isResolved()" [routerLink]="['/g', bounty.groupId, 'b', bounty.id]">
+    <a class="bounty-card" [class.muted]="isResolved()" [routerLink]="['/g', bounty.groupId, 'b', bounty.id]"
+       data-testid="bounty-card" [attr.data-bounty-id]="bounty.id" [attr.data-state]="bounty.state">
       <div class="row1">
         <app-state-badge [bountyState]="bounty.state" />
         @if (bounty.state === 'successful') {

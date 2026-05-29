@@ -109,6 +109,15 @@ describe('groups/{gid}', () => {
       addDoc(collection(a.db, 'groups'), { name: 'x', ownerId: b.uid }),
     );
   });
+
+  it('[D2][P1] blocks a non-member from reading the bounties collection', async () => {
+    const { owner, stranger, groupId } = await seedGroup();
+    await addDoc(
+      collection(owner.db, 'groups', groupId, 'bounties'),
+      availableBounty(owner.uid),
+    );
+    await expectReject(getDocs(collection(stranger.db, 'groups', groupId, 'bounties')));
+  });
 });
 
 describe('groups/{gid}/members/{userId}', () => {
@@ -144,6 +153,20 @@ describe('groups/{gid}/members/{userId}', () => {
     await expectReject(
       updateDoc(doc(member.db, 'groups', groupId, 'members', member.uid), {
         role: 'owner',
+      }),
+    );
+  });
+
+  it('[D3][P1] forbids a plain member from changing another member\'s role', async () => {
+    const { owner, member, groupId } = await seedGroup();
+    // Seed a second member for `member` to attempt to promote.
+    const other = await createUser('Other Member');
+    const grp = await getDoc(doc(owner.db, 'groups', groupId));
+    await other.call('joinGroup', { inviteCode: grp.data()?.['inviteCode'] });
+
+    await expectReject(
+      updateDoc(doc(member.db, 'groups', groupId, 'members', other.uid), {
+        role: 'admin',
       }),
     );
   });

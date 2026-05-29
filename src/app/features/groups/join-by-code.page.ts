@@ -14,7 +14,7 @@ import { ToastService } from '../../shared/toast.service';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="wrap">
+    <div class="wrap" data-testid="join-page">
       <h2>Join via invite</h2>
       <p class="code">Code: <strong>{{ code() }}</strong></p>
       @if (status() === 'auth') {

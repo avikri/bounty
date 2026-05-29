@@ -22,7 +22,7 @@ function kindOf(url: string): MediaKind {
     @if (urls.length) {
       <div class="grid">
         @for (u of urls; track u; let i = $index) {
-          <button class="tile" (click)="open(i)" type="button">
+          <button class="tile" (click)="open(i)" type="button" data-testid="proof-thumb">
             @switch (kind(u)) {
               @case ('image') { <img [src]="u" alt="proof" loading="lazy" /> }
               @case ('video') {
@@ -38,7 +38,7 @@ function kindOf(url: string): MediaKind {
     }
 
     @if (lightbox() !== null) {
-      <div class="lb-bg" (click)="close()">
+      <div class="lb-bg" (click)="close()" data-testid="lightbox">
         <button class="lb-close" (click)="close()" aria-label="Close"><app-icon name="close" [size]="18" /></button>
         <div class="lb-stage" (click)="$event.stopPropagation()">
           @if (urls.length > 1) {

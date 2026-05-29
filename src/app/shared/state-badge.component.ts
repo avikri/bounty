@@ -24,7 +24,7 @@ const CLS: Record<BountyState, string> = {
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <span class="state-badge" [class]="cls()">
+    <span class="state-badge" [class]="cls()" data-testid="state-badge" [attr.data-state]="state()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
         @switch (state()) {
           @case ('available') {

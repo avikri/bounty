@@ -25,14 +25,15 @@ type Range = 'all' | 'month' | 'week';
 
         <div class="range-tabs">
           @for (r of ranges; track r.key) {
-            <button class="pill" [class.active]="range() === r.key" (click)="range.set(r.key)">{{ r.label }}</button>
+            <button class="pill" [class.active]="range() === r.key" (click)="range.set(r.key)"
+                    [attr.data-testid]="'range-' + r.key" [attr.data-active]="range() === r.key">{{ r.label }}</button>
           }
         </div>
 
         @if (top3(); as t) {
-          <div class="podium">
+          <div class="podium" data-testid="podium">
             @if (t[1]) {
-              <div class="podium-cell silver">
+              <div class="podium-cell silver" data-testid="podium-2" [attr.data-uid]="t[1].user.uid">
                 <app-avatar [initials]="t[1].user.initials" [variant]="t[1].user.avatarVariant" size="lg" />
                 <div class="name">{{ t[1].user.handle }}</div>
                 <div class="pts mid">{{ t[1].points }}</div>
@@ -40,7 +41,7 @@ type Range = 'all' | 'month' | 'week';
               </div>
             }
             @if (t[0]) {
-              <div class="podium-cell gold">
+              <div class="podium-cell gold" data-testid="podium-1" [attr.data-uid]="t[0].user.uid">
                 <app-avatar [initials]="t[0].user.initials" [variant]="t[0].user.avatarVariant" size="xl" />
                 <div class="name big">{{ t[0].user.uid === me().uid ? 'you (' + t[0].user.handle + ')' : t[0].user.handle }}</div>
                 <div class="pts big">{{ t[0].points }}</div>
@@ -48,7 +49,7 @@ type Range = 'all' | 'month' | 'week';
               </div>
             }
             @if (t[2]) {
-              <div class="podium-cell bronze">
+              <div class="podium-cell bronze" data-testid="podium-3" [attr.data-uid]="t[2].user.uid">
                 <app-avatar [initials]="t[2].user.initials" [variant]="t[2].user.avatarVariant" size="lg" />
                 <div class="name">{{ t[2].user.handle }}</div>
                 <div class="pts mid">{{ t[2].points }}</div>
@@ -68,7 +69,7 @@ type Range = 'all' | 'month' | 'week';
             <div class="num">Points</div>
           </div>
           @for (e of rest(); track e.userId) {
-            <div class="table-row">
+            <div class="table-row" data-testid="lb-row" [attr.data-uid]="e.userId">
               <div><div class="rank">{{ e.rank }}</div></div>
               <div class="member">
                 <app-avatar [initials]="e.user.initials" [variant]="e.user.avatarVariant" size="sm" />

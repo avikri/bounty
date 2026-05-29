@@ -17,7 +17,7 @@ import { ToastHostComponent } from '../shared/toast.service';
   template: `
     <div class="shell">
       <!-- Desktop sidebar -->
-      <aside class="sidebar">
+      <aside class="sidebar" data-testid="sidebar">
         <a class="brand" routerLink="/groups">Bounty<span>.</span></a>
 
         <div class="sec-label">Groups</div>
@@ -33,7 +33,7 @@ import { ToastHostComponent } from '../shared/toast.service';
           <app-icon name="reviews" [size]="16" />
           Reviews
           @if (pendingCount() > 0) {
-            <span class="badge">{{ pendingCount() }}</span>
+            <span class="badge" data-testid="reviews-badge">{{ pendingCount() }}</span>
           }
         </a>
         <a class="nav-item" routerLink="/inbox" routerLinkActive="active">
@@ -50,10 +50,10 @@ import { ToastHostComponent } from '../shared/toast.service';
       </aside>
 
       <!-- Mobile floating notification bell -->
-      <a class="bell" routerLink="/inbox" aria-label="Notifications">
+      <a class="bell" routerLink="/inbox" aria-label="Notifications" data-testid="bell">
         <app-icon name="bell" [size]="20" />
         @if (unreadCount() > 0) {
-          <span class="bell-badge">{{ unreadCount() > 99 ? '99+' : unreadCount() }}</span>
+          <span class="bell-badge" data-testid="bell-badge">{{ unreadCount() > 99 ? '99+' : unreadCount() }}</span>
         }
       </a>
 
@@ -62,7 +62,7 @@ import { ToastHostComponent } from '../shared/toast.service';
       </main>
 
       <!-- Desktop right rail (contextual cards) -->
-      <aside class="rail">
+      <aside class="rail" data-testid="rail">
         @if (railLeaderboard().length) {
           <div class="rail-card">
             <h4>Top in {{ currentGroup()?.name ?? 'group' }}</h4>
@@ -110,7 +110,7 @@ import { ToastHostComponent } from '../shared/toast.service';
       </aside>
 
       <!-- Mobile bottom tab bar -->
-      <nav class="tabbar">
+      <nav class="tabbar" data-testid="tabbar">
         <a class="tab" routerLink="/groups" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: false }">
           <app-icon name="groups" [size]="22" />
           <span>Groups</span>
@@ -122,7 +122,7 @@ import { ToastHostComponent } from '../shared/toast.service';
             <span class="tab-badge">{{ pendingCount() }}</span>
           }
         </a>
-        <a class="tab post" [routerLink]="postRoute()">
+        <a class="tab post" [routerLink]="postRoute()" data-testid="tab-post">
           <app-icon name="post" [size]="22" />
           <span>Post</span>
         </a>

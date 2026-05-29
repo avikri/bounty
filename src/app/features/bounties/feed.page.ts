@@ -41,8 +41,8 @@ type FilterKey = 'all' | 'available' | 'claimed' | 'pending_review' | 'mine';
             <div class="sub">{{ g.memberIds.length }} members · {{ activeCount() }} active bounties · {{ rankBlurb() }}</div>
           </div>
           <div style="display:flex;gap:8px;">
-            <a class="btn ghost" [routerLink]="['/g', g.id, 'settings']">Settings</a>
-            <button class="btn" (click)="goCreate()">
+            <a class="btn ghost" [routerLink]="['/g', g.id, 'settings']" data-testid="group-settings-link">Settings</a>
+            <button class="btn" (click)="goCreate()" data-testid="post-bounty">
               <app-icon name="plus" [size]="14" />
               Post bounty
             </button>
@@ -55,8 +55,9 @@ type FilterKey = 'all' | 'available' | 'claimed' | 'pending_review' | 'mine';
               class="pill"
               [class.active]="filter() === f.key"
               (click)="filter.set(f.key)"
+              [attr.data-testid]="'filter-' + f.key"
             >
-              {{ f.label }}@if (f.count !== undefined) { · {{ f.count }} }
+              {{ f.label }}@if (f.count !== undefined) { · <span [attr.data-testid]="'count-' + f.key">{{ f.count }}</span> }
             </button>
           }
         </div>
@@ -76,7 +77,7 @@ type FilterKey = 'all' | 'available' | 'claimed' | 'pending_review' | 'mine';
         </div>
 
         <!-- mobile FAB -->
-        <button class="fab" (click)="goCreate()" aria-label="Post bounty">
+        <button class="fab" (click)="goCreate()" aria-label="Post bounty" data-testid="fab-post">
           <app-icon name="plus" [size]="22" />
         </button>
       </div>

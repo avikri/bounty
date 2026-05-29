@@ -43,7 +43,7 @@ const MAX_VIDEO_BYTES = 100 * 1024 * 1024; // 100 MB
         <label class="label">Proof (up to {{ maxFiles }})</label>
         <div class="proof-grid">
           @for (f of files(); track f.id) {
-            <div class="proof-tile">
+            <div class="proof-tile" data-testid="proof-tile">
               @if (f.kind === 'image') {
                 <img [src]="f.previewUrl" alt="proof preview" />
               } @else {
@@ -60,18 +60,18 @@ const MAX_VIDEO_BYTES = 100 * 1024 * 1024; // 100 MB
             </div>
           }
           @if (files().length < maxFiles) {
-            <button class="add-tile" (click)="picker.click()" [disabled]="busy()">
+            <button class="add-tile" (click)="picker.click()" [disabled]="busy()" data-testid="proof-add">
               <app-icon name="plus" [size]="22" />
             </button>
           }
         </div>
         <input #picker type="file" accept="image/*,video/*" multiple hidden
-               (change)="onPick($event)" />
+               (change)="onPick($event)" data-testid="proof-input" />
         <div class="caps">Images up to 10&nbsp;MB · video up to 100&nbsp;MB</div>
 
         <label class="label">Note to OP <span class="muted">(optional)</span></label>
         <textarea class="input" rows="3" style="resize: none;" [(ngModel)]="note"
-                  placeholder="Context, timestamps, witnesses..."></textarea>
+                  placeholder="Context, timestamps, witnesses..." data-testid="proof-note"></textarea>
 
         <div class="gap"></div>
         <div class="hint">
@@ -80,7 +80,7 @@ const MAX_VIDEO_BYTES = 100 * 1024 * 1024; // 100 MB
         </div>
 
         <div class="gap"></div>
-        <button class="btn full" (click)="submit()" [disabled]="busy()">
+        <button class="btn full" (click)="submit()" [disabled]="busy()" data-testid="submit-proof">
           {{ busy() ? 'Uploading…' : 'Submit for review' }}
         </button>
       </div>

@@ -39,22 +39,22 @@ interface DisplayIou {
         <div class="stats">
           <div class="stat primary">
             <div class="stat-label">Points</div>
-            <div class="stat-value">{{ u.totalPoints }}</div>
+            <div class="stat-value" data-testid="stat-points">{{ u.totalPoints }}</div>
           </div>
           <div class="stat success">
             <div class="stat-label">Wins</div>
-            <div class="stat-value">{{ winsCount() }}</div>
+            <div class="stat-value" data-testid="stat-wins">{{ winsCount() }}</div>
           </div>
           <div class="stat danger">
             <div class="stat-label">Losses</div>
-            <div class="stat-value">{{ lossesCount() }}</div>
+            <div class="stat-value" data-testid="stat-losses">{{ lossesCount() }}</div>
           </div>
         </div>
 
         <div class="kicker">Open IOUs</div>
-        <div class="iou-card">
+        <div class="iou-card" data-testid="open-ious">
           @for (row of openIous(); track row.iou.id; let last = $last) {
-            <div class="iou-row" [class.last]="last">
+            <div class="iou-row" [class.last]="last" data-testid="iou-open-row" [attr.data-iou-id]="row.iou.id">
               @if (row.counterparty; as c) {
                 <app-avatar [initials]="c.initials" [variant]="c.avatarVariant" size="sm" />
               }
@@ -77,11 +77,12 @@ interface DisplayIou {
               </div>
               @if (isMe()) {
                 @if (row.myMark) {
-                  <span class="pending-pill">Waiting…</span>
+                  <span class="pending-pill" data-testid="iou-waiting">Waiting…</span>
                 } @else {
                   <button class="btn ghost sm"
                           (click)="markPaid(row.iou.id)"
-                          [disabled]="busyId() === row.iou.id">
+                          [disabled]="busyId() === row.iou.id"
+                          data-testid="iou-action">
                     {{ busyId() === row.iou.id ? '…' : (row.iOweThem ? 'Mark as paid' : 'Confirm received') }}
                   </button>
                 }
@@ -94,7 +95,7 @@ interface DisplayIou {
 
         @if (settledIous().length > 0) {
           <div class="kicker">Settled</div>
-          <div class="iou-card">
+          <div class="iou-card" data-testid="settled-ious">
             @for (row of settledIous(); track row.iou.id; let last = $last) {
               <div class="iou-row settled" [class.last]="last">
                 @if (row.counterparty; as c) {
@@ -114,7 +115,7 @@ interface DisplayIou {
 
         <div class="kicker">Recent</div>
         @for (b of recent(); track b.id) {
-          <div class="recent-card">
+          <div class="recent-card" data-testid="recent-card">
             <div class="title">{{ b.title }}</div>
             <app-state-badge
               [bountyState]="b.state"

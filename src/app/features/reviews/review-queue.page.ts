@@ -38,6 +38,8 @@ import { Bounty, Group } from '../../core/models';
                 class="review-row"
                 [class.selected]="selectedId() === b.id"
                 (click)="select(b.id)"
+                data-testid="review-row"
+                [attr.data-bounty-id]="b.id"
               >
                 @if (firstImage(b); as src) {
                   <img class="thumb img" [src]="src" alt="proof" />
@@ -64,7 +66,7 @@ import { Bounty, Group } from '../../core/models';
         </div>
 
         @if (selected(); as b) {
-          <aside class="detail-panel">
+          <aside class="detail-panel" data-testid="review-detail">
             <app-state-badge [bountyState]="b.state" />
             <h3 class="d-title">{{ b.title }}</h3>
             @if (b.proof?.urls?.length) {
@@ -84,8 +86,8 @@ import { Bounty, Group } from '../../core/models';
               Reject → {{ claimantOf(b)?.handle }} <strong>−{{ b.price }} pts</strong>.
             </div>
             <div class="action-row">
-              <button class="btn danger" (click)="openReject(b.id)" [disabled]="busy()">Reject</button>
-              <button class="btn success" (click)="approve(b.id)" [disabled]="busy()">Approve</button>
+              <button class="btn danger" (click)="openReject(b.id)" [disabled]="busy()" data-testid="reject">Reject</button>
+              <button class="btn success" (click)="approve(b.id)" [disabled]="busy()" data-testid="approve">Approve</button>
             </div>
           </aside>
         }
@@ -93,15 +95,15 @@ import { Bounty, Group } from '../../core/models';
     </div>
 
     @if (rejectingId(); as rid) {
-      <div class="modal-bg" (click)="cancelReject()">
+      <div class="modal-bg" (click)="cancelReject()" data-testid="reject-modal">
         <div class="modal" (click)="$event.stopPropagation()">
           <h3>Reject submission</h3>
           <p class="hint">Optional: tell the claimant why this didn't pass.</p>
           <textarea class="input" rows="4" [(ngModel)]="rejectReason" maxlength="500"
-                    placeholder="e.g. visible hand contact at 0:14"></textarea>
+                    placeholder="e.g. visible hand contact at 0:14" data-testid="reject-reason"></textarea>
           <div class="row-end">
             <button class="btn ghost" (click)="cancelReject()" [disabled]="busy()">Cancel</button>
-            <button class="btn danger" (click)="confirmReject(rid)" [disabled]="busy()">
+            <button class="btn danger" (click)="confirmReject(rid)" [disabled]="busy()" data-testid="reject-confirm">
               {{ busy() ? 'Rejecting…' : 'Reject' }}
             </button>
           </div>

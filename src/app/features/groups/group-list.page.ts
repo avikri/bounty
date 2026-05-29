@@ -24,7 +24,7 @@ type Dialog = 'none' | 'create' | 'join';
       </div>
 
       @for (g of groups(); track g.id) {
-        <a class="group-card" [routerLink]="['/g', g.id]">
+        <a class="group-card" [routerLink]="['/g', g.id]" data-testid="group-card" [attr.data-group-id]="g.id">
           <div class="emoji-tile" [class]="'tone-' + g.surfaceTone">{{ g.emoji }}</div>
           <div class="meat">
             <div class="name">{{ g.name }}</div>

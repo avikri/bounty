@@ -7,13 +7,13 @@ import { AuthService } from '../../core/auth.service';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="page">
+    <div class="page" data-testid="login-page">
       <div class="frame">
         <div class="spacer"></div>
         <h1 class="wordmark">Bounty<span>.</span></h1>
         <p class="lede">Dares with a price tag. Your group, your rules, your shame.</p>
         <div style="flex: 1;"></div>
-        <button class="btn full dark" [disabled]="busy()" (click)="signInGoogle()">
+        <button class="btn full dark" [disabled]="busy()" (click)="signInGoogle()" data-testid="login-google">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="white"><path d="M19.5 13.5h-7v-3h4a4 4 0 1 0-1.2-2.8l-2-2A6.99 6.99 0 1 1 19.5 13.5z"/></svg>
           Continue with Google
         </button>

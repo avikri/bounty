@@ -24,6 +24,7 @@ import * as admin from "firebase-admin";
 // emulator and production.
 import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
+import {runBountyExpiry} from "./expiry";
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -33,7 +34,6 @@ setGlobalOptions({maxInstances: 10, region: "australia-southeast1"});
 const MAX_LEADERBOARD_ENTRIES = 100;
 const MAX_PROOF_NOTE_CHARS = 500;
 const MAX_REJECTION_REASON_CHARS = 500;
-const EXPIRY_BATCH_LIMIT = 400;
 
 /* ── shared types ─────────────────────────────────────────────────── */
 
@@ -528,44 +528,15 @@ export const rejectBounty = onCall(async (req) => {
 /* ── onBountyExpiry (nightly sweep) ───────────────────────────────── */
 
 export const onBountyExpiry = onSchedule("every day 03:00", async () => {
-  const now = Timestamp.now();
-
-  // Spec: expire anything still 'available' OR 'claimed' past expiresAt.
-  // Firestore doesn't allow `in` + range on a non-equality field cheaply,
-  // so we run two queries and merge.
-  const [availSnap, claimedSnap] = await Promise.all([
-    db.collectionGroup("bounties")
-        .where("state", "==", "available")
-        .where("expiresAt", "<", now)
-        .get(),
-    db.collectionGroup("bounties")
-        .where("state", "==", "claimed")
-        .where("expiresAt", "<", now)
-        .get(),
-  ]);
-
-  const docs = [...availSnap.docs, ...claimedSnap.docs];
-  if (docs.length === 0) {
+  // The scheduled trigger is a thin wrapper; the actual sweep lives in the
+  // exported `runBountyExpiry` handler so it can be integration-tested with a
+  // controllable `now` against the emulator (see tests/integration/expiry.spec).
+  const expired = await runBountyExpiry(db, Timestamp.now());
+  if (expired === 0) {
     logger.info("onBountyExpiry: nothing to expire");
-    return;
+  } else {
+    logger.info("onBountyExpiry: expired bounties", {count: expired});
   }
-
-  let expired = 0;
-  // Each bounty contributes 2 writes (bounty update + activity event),
-  // so cap each batch below 500 operations.
-  for (let i = 0; i < docs.length; i += EXPIRY_BATCH_LIMIT) {
-    const batch = db.batch();
-    const slice = docs.slice(i, i + EXPIRY_BATCH_LIMIT);
-    for (const doc of slice) {
-      batch.update(doc.ref, {state: "expired", resolvedAt: now});
-      const actRef = doc.ref.collection("activity").doc();
-      batch.set(actRef, {kind: "expired", actorId: "system", at: now});
-    }
-    await batch.commit();
-    expired += slice.length;
-  }
-
-  logger.info("onBountyExpiry: expired bounties", {count: expired});
 });
 
 /* ── createGroup ──────────────────────────────────────────────────── */

@@ -23,13 +23,13 @@ const MAX_DESCRIPTION = 1000;
         </div>
 
         <label class="label">Title <span class="cap">{{ title().length }}/{{ MAX_TITLE }}</span></label>
-        <input class="input" [(ngModel)]="title" placeholder="What's the dare?" [maxlength]="MAX_TITLE" />
+        <input class="input" [(ngModel)]="title" placeholder="What's the dare?" [maxlength]="MAX_TITLE" data-testid="bounty-title" />
         <div class="gap"></div>
 
         <label class="label">The fine print <span class="cap">{{ description().length }}/{{ MAX_DESCRIPTION }}</span></label>
         <textarea class="input" rows="3" style="resize: none;" [(ngModel)]="description"
                   [maxlength]="MAX_DESCRIPTION"
-                  placeholder="Rules, proof requirements, witness clauses..."></textarea>
+                  placeholder="Rules, proof requirements, witness clauses..." data-testid="bounty-description"></textarea>
         <div class="gap"></div>
 
         <div class="row2">
@@ -37,12 +37,12 @@ const MAX_DESCRIPTION = 1000;
             <label class="label">Price</label>
             <div class="price-input">
               <span class="prefix">$</span>
-              <input class="input" type="number" [(ngModel)]="price" min="1" step="1" />
+              <input class="input" type="number" [(ngModel)]="price" min="1" step="1" data-testid="bounty-price" />
             </div>
           </div>
           <div>
             <label class="label">Expires</label>
-            <input class="input" type="date" [(ngModel)]="expires" />
+            <input class="input" type="date" [(ngModel)]="expires" data-testid="bounty-expires" />
           </div>
         </div>
 
@@ -61,7 +61,7 @@ const MAX_DESCRIPTION = 1000;
         </div>
 
         <div class="gap"></div>
-        <button class="btn full" (click)="submit()" [disabled]="!canSubmit()">Post to {{ shortName(g.name) }}</button>
+        <button class="btn full" (click)="submit()" [disabled]="!canSubmit()" data-testid="submit-bounty">Post to {{ shortName(g.name) }}</button>
       </div>
     } @else {
       <div class="wrap"><p>Group not found.</p></div>
