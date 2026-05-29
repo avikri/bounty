@@ -1,0 +1,2080 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Bounty — Design spec &amp; mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* warm cream + ink */
+    --bg:        oklch(0.985 0.010 80);
+    --bg-2:      oklch(0.965 0.014 78);
+    --bg-3:      oklch(0.945 0.018 76);
+    --card:      oklch(1.00 0 0);
+    --ink:       oklch(0.22 0.020 60);
+    --ink-2:     oklch(0.38 0.020 60);
+    --muted:     oklch(0.56 0.018 70);
+    --line:      oklch(0.90 0.012 75);
+    --line-2:    oklch(0.84 0.015 75);
+
+    /* accents — orange primary, harmonized supporting hues */
+    --primary:        oklch(0.72 0.175 50);   /* tangerine */
+    --primary-deep:   oklch(0.58 0.180 45);
+    --primary-soft:   oklch(0.94 0.045 65);
+    --success:        oklch(0.68 0.155 150);
+    --success-soft:   oklch(0.94 0.045 150);
+    --danger:         oklch(0.62 0.205 28);
+    --danger-soft:    oklch(0.94 0.045 28);
+    --info:           oklch(0.65 0.140 240);
+    --info-soft:      oklch(0.94 0.040 240);
+    --warn:           oklch(0.78 0.165 88);
+    --warn-soft:      oklch(0.95 0.060 88);
+    --purple:         oklch(0.62 0.170 300);
+    --purple-soft:    oklch(0.95 0.040 300);
+
+    --r-sm: 10px;
+    --r-md: 14px;
+    --r-lg: 20px;
+    --r-xl: 28px;
+    --r-2xl: 36px;
+
+    --shadow-1: 0 1px 0 rgba(40,30,15,.04), 0 2px 8px rgba(40,30,15,.04);
+    --shadow-2: 0 1px 0 rgba(40,30,15,.05), 0 8px 24px rgba(40,30,15,.06);
+    --shadow-3: 0 24px 60px rgba(40,30,15,.10);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); }
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .doc { max-width: 1180px; margin: 0 auto; padding: 56px 32px 120px; }
+
+  /* ───────── Hero ───────── */
+  .hero {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 32px;
+    padding: 24px 0 36px;
+    border-bottom: 1px dashed var(--line-2);
+    margin-bottom: 48px;
+  }
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 18px;
+  }
+  .eyebrow .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--primary); }
+  h1.title {
+    font-family: 'Bricolage Grotesque', serif;
+    font-weight: 700;
+    font-size: clamp(44px, 6vw, 76px);
+    line-height: 0.95;
+    letter-spacing: -0.025em;
+    margin: 0 0 14px;
+    color: var(--ink);
+  }
+  h1.title em {
+    font-style: normal;
+    color: var(--primary-deep);
+    background: linear-gradient(180deg, transparent 62%, var(--primary-soft) 62%);
+    padding: 0 6px;
+  }
+  .hero p.lede { font-size: 19px; color: var(--ink-2); max-width: 560px; margin: 0; text-wrap: pretty; }
+  .meta-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    padding: 18px 20px;
+    font-size: 13px;
+    color: var(--ink-2);
+    box-shadow: var(--shadow-1);
+    min-width: 240px;
+  }
+  .meta-card dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; }
+  .meta-card dt { font-family: 'JetBrains Mono', monospace; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .meta-card dd { margin: 0; color: var(--ink); font-weight: 500; }
+
+  /* ───────── Section chrome ───────── */
+  section.spec { margin: 80px 0; scroll-margin-top: 40px; }
+  .sec-head { display: flex; align-items: baseline; gap: 18px; margin-bottom: 26px; }
+  .sec-num {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--primary-deep);
+    font-size: 14px;
+    font-weight: 500;
+  }
+  h2.sec-title {
+    font-family: 'Bricolage Grotesque', serif;
+    font-weight: 700;
+    font-size: clamp(30px, 3.4vw, 42px);
+    margin: 0;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .sec-sub { color: var(--muted); margin: -10px 0 28px; font-size: 16px; max-width: 720px; text-wrap: pretty; }
+
+  h3 { font-family: 'Bricolage Grotesque', serif; font-weight: 700; font-size: 22px; letter-spacing: -0.01em; margin: 32px 0 14px; color: var(--ink); }
+  h4 { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700; font-size: 15px; margin: 18px 0 8px; color: var(--ink); }
+  p { margin: 0 0 12px; color: var(--ink-2); text-wrap: pretty; }
+  ul, ol { margin: 0 0 16px; padding-left: 20px; color: var(--ink-2); }
+  li { margin: 4px 0; }
+  code, kbd, .mono { font-family: 'JetBrains Mono', monospace; font-size: 0.86em; background: var(--bg-3); padding: 1px 6px; border-radius: 6px; color: var(--ink); }
+
+  /* ───────── Cards & grids ───────── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    padding: 22px;
+    box-shadow: var(--shadow-1);
+  }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 18px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 18px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; }
+  @media (max-width: 820px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    .hero { grid-template-columns: 1fr; }
+  }
+
+  /* ───────── Screen list ───────── */
+  .screen-row {
+    display: grid;
+    grid-template-columns: 48px 1.2fr 2fr;
+    gap: 20px;
+    padding: 18px 0;
+    border-top: 1px solid var(--line);
+    align-items: start;
+  }
+  .screen-row:first-of-type { border-top: 0; }
+  .screen-row .idx {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--muted);
+    font-size: 13px;
+    padding-top: 2px;
+  }
+  .screen-row .name { font-weight: 700; font-size: 17px; color: var(--ink); margin-bottom: 4px; }
+  .screen-row .name small { display: block; font-weight: 500; color: var(--muted); font-size: 12px; font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
+  .screen-row .body p { font-size: 14px; }
+  .screen-row .body ul { padding-left: 18px; font-size: 14px; }
+  .screen-row .body strong { color: var(--ink); }
+
+  /* ───────── Palette swatches ───────── */
+  .swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+  @media (max-width: 720px) { .swatches { grid-template-columns: repeat(3, 1fr); } }
+  .sw {
+    border-radius: var(--r-md);
+    border: 1px solid var(--line);
+    overflow: hidden;
+    background: var(--card);
+  }
+  .sw .chip { height: 78px; }
+  .sw .meta { padding: 10px 12px; }
+  .sw .meta b { display:block; font-size: 13px; }
+  .sw .meta code { background: transparent; padding: 0; color: var(--muted); font-size: 11px; }
+
+  /* ───────── Bounty state legend ───────── */
+  .states { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  @media (max-width: 820px) { .states { grid-template-columns: repeat(2, 1fr); } }
+  .state-cell {
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    padding: 18px;
+    background: var(--card);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .state-icon {
+    width: 44px; height: 44px; border-radius: 12px;
+    display: grid; place-items: center;
+    flex-shrink: 0;
+  }
+  .state-cell b { font-size: 15px; }
+  .state-cell span { font-size: 13px; color: var(--muted); }
+
+  /* state colors */
+  .s-available { background: var(--info-soft); color: var(--info); }
+  .s-claimed   { background: var(--warn-soft); color: oklch(0.50 0.140 75); }
+  .s-pending   { background: var(--purple-soft); color: var(--purple); }
+  .s-success   { background: var(--success-soft); color: var(--success); }
+  .s-failed    { background: var(--danger-soft); color: var(--danger); }
+
+  /* ───────── Tree / code blocks ───────── */
+  pre.tree, pre.code {
+    margin: 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: var(--ink);
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: 18px 20px;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  pre.tree .c { color: var(--muted); }
+  pre.tree .k { color: var(--primary-deep); }
+  pre.tree .s { color: var(--success); }
+  pre.code .k { color: var(--primary-deep); font-weight: 600; }
+  pre.code .s { color: oklch(0.55 0.140 150); }
+  pre.code .c { color: var(--muted); font-style: italic; }
+  pre.code .n { color: oklch(0.55 0.150 240); }
+
+  /* schema tables */
+  table.schema { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 8px; }
+  table.schema th, table.schema td { padding: 9px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+  table.schema th { font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 500; }
+  table.schema td.f { font-family: 'JetBrains Mono', monospace; color: var(--ink); white-space: nowrap; }
+  table.schema td.t { font-family: 'JetBrains Mono', monospace; color: var(--primary-deep); font-size: 12px; }
+  table.schema td.d { color: var(--ink-2); }
+
+  /* ───────── Tag/Pill ───────── */
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--bg-3);
+    color: var(--ink-2);
+  }
+  .pill.smart { background: var(--primary-soft); color: var(--primary-deep); }
+  .pill.dumb  { background: var(--info-soft);    color: var(--info); }
+  .pill.svc   { background: var(--purple-soft);  color: var(--purple); }
+  .pill.guard { background: var(--success-soft); color: var(--success); }
+
+  /* ───────── Mockup gallery chrome ───────── */
+  .gallery-head {
+    display: flex; align-items: end; justify-content: space-between;
+    margin: 100px 0 32px;
+    padding-top: 40px;
+    border-top: 1px dashed var(--line-2);
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .gallery-head .left { max-width: 640px; }
+  .gallery-head .tag {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--primary-deep);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .gallery-head h2 {
+    font-family: 'Bricolage Grotesque', serif;
+    font-size: clamp(34px, 4vw, 52px);
+    margin: 10px 0 8px;
+    letter-spacing: -0.025em;
+  }
+
+  .device-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 36px 28px;
+    align-items: start;
+  }
+  .device-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  .device-cell .caption {
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .device-cell .caption b { color: var(--ink); display: block; font-family: 'Plus Jakarta Sans'; font-size: 14px; text-transform: none; letter-spacing: 0; font-weight: 700; margin-bottom: 2px; }
+
+  /* ───────── Phone frame ───────── */
+  .phone {
+    width: 320px;
+    height: 660px;
+    background: #111;
+    border-radius: 44px;
+    padding: 8px;
+    box-shadow: var(--shadow-3);
+    position: relative;
+    flex-shrink: 0;
+  }
+  .phone .screen {
+    width: 100%; height: 100%;
+    border-radius: 36px;
+    overflow: hidden;
+    background: var(--bg);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  .phone .notch {
+    position: absolute;
+    top: 14px; left: 50%; transform: translateX(-50%);
+    width: 84px; height: 22px;
+    background: #111;
+    border-radius: 999px;
+    z-index: 5;
+  }
+  .phone .statusbar {
+    height: 36px;
+    padding: 12px 22px 0;
+    display: flex; align-items: flex-start; justify-content: space-between;
+    font-size: 12px; font-weight: 700; color: var(--ink);
+    z-index: 3;
+  }
+  .phone .statusbar .right { display: flex; gap: 5px; align-items: center; }
+  .phone .body {
+    flex: 1;
+    overflow: hidden;
+    padding: 6px 16px 70px;
+  }
+  .phone .tabbar {
+    position: absolute; bottom: 8px; left: 8px; right: 8px;
+    height: 62px;
+    background: var(--card);
+    border-radius: 22px;
+    margin: 0 8px 6px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    box-shadow: 0 -2px 12px rgba(40,30,15,.04);
+    border: 1px solid var(--line);
+  }
+  .phone .tabbar .tab {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 9px; font-weight: 600; gap: 3px;
+  }
+  .phone .tabbar .tab.active { color: var(--primary-deep); }
+  .phone .tabbar .tab.active svg { color: var(--primary); }
+  .phone .tabbar svg { width: 22px; height: 22px; }
+
+  /* ───────── Browser/desktop frame ───────── */
+  .browser {
+    width: 100%;
+    max-width: 1100px;
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: var(--shadow-3);
+    border: 1px solid var(--line);
+    background: var(--card);
+  }
+  .browser .chrome {
+    background: var(--bg-2);
+    height: 44px;
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .browser .chrome .dots { display: flex; gap: 6px; margin-right: 10px; }
+  .browser .chrome .dots i { width: 12px; height: 12px; border-radius: 999px; display: block; }
+  .browser .chrome .url {
+    flex: 1; max-width: 380px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    height: 28px;
+    padding: 0 12px;
+    display: flex; align-items: center; gap: 8px;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    color: var(--muted);
+  }
+  .browser .desktop-page { background: var(--bg); padding: 28px 32px; min-height: 620px; }
+
+  /* ───────── Shared screen UI ───────── */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 4px 4px 12px;
+  }
+  .topbar h2 {
+    font-family: 'Bricolage Grotesque'; font-weight: 700;
+    font-size: 22px; margin: 0; letter-spacing: -0.02em;
+  }
+  .topbar .sub { font-size: 12px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+  .avatar {
+    width: 36px; height: 36px; border-radius: 999px;
+    background: linear-gradient(135deg, var(--primary), oklch(0.78 0.13 30));
+    color: white; display: grid; place-items: center;
+    font-weight: 700; font-size: 14px;
+    flex-shrink: 0;
+  }
+  .avatar.sm { width: 28px; height: 28px; font-size: 12px; }
+  .avatar.lg { width: 56px; height: 56px; font-size: 20px; }
+  .avatar.v2 { background: linear-gradient(135deg, var(--info), oklch(0.78 0.13 280)); }
+  .avatar.v3 { background: linear-gradient(135deg, var(--success), oklch(0.78 0.13 120)); }
+  .avatar.v4 { background: linear-gradient(135deg, var(--purple), oklch(0.78 0.13 320)); }
+  .avatar.v5 { background: linear-gradient(135deg, var(--warn), oklch(0.78 0.13 60)); }
+
+  .bounty-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    padding: 14px;
+    box-shadow: var(--shadow-1);
+    margin-bottom: 12px;
+  }
+  .bounty-card .row1 {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; margin-bottom: 8px;
+  }
+  .bounty-card .price {
+    font-family: 'Bricolage Grotesque';
+    font-weight: 700; font-size: 22px;
+    color: var(--ink); letter-spacing: -0.02em;
+  }
+  .bounty-card .price small { font-size: 12px; color: var(--muted); font-weight: 500; font-family: 'Plus Jakarta Sans'; }
+  .bounty-card .title-line {
+    font-size: 14px; font-weight: 600; color: var(--ink); line-height: 1.35;
+    margin-bottom: 8px;
+  }
+  .bounty-card .row2 {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .bounty-card .row2 .dot { width: 3px; height: 3px; border-radius: 999px; background: var(--muted); }
+
+  /* state badges */
+  .state-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; font-weight: 700;
+    padding: 4px 9px;
+    border-radius: 999px;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .state-badge svg { width: 12px; height: 12px; }
+
+  .btn {
+    border: 0;
+    background: var(--primary);
+    color: white;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 14px;
+    padding: 12px 16px;
+    border-radius: 14px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    cursor: pointer;
+    box-shadow: 0 1px 0 oklch(0.50 0.180 45), 0 4px 10px rgba(249,115,22,.25);
+  }
+  .btn.ghost { background: var(--bg-3); color: var(--ink); box-shadow: none; }
+  .btn.outline { background: transparent; color: var(--ink); border: 1.5px solid var(--line-2); box-shadow: none; }
+  .btn.success { background: var(--success); box-shadow: 0 1px 0 oklch(0.50 0.155 150), 0 4px 10px rgba(0,150,80,.18); }
+  .btn.danger { background: var(--danger); box-shadow: 0 1px 0 oklch(0.45 0.205 28), 0 4px 10px rgba(220,38,38,.18); }
+  .btn.full { width: 100%; }
+
+  .input {
+    background: var(--card);
+    border: 1.5px solid var(--line-2);
+    border-radius: 14px;
+    padding: 12px 14px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--ink);
+    width: 100%;
+  }
+  .input:focus { outline: none; border-color: var(--primary); }
+  .label { font-size: 12px; font-weight: 700; color: var(--ink); margin-bottom: 6px; display: block; }
+
+  /* image placeholder */
+  .img-ph {
+    background:
+      repeating-linear-gradient(135deg, var(--bg-2) 0 8px, var(--bg-3) 8px 16px);
+    border-radius: var(--r-md);
+    border: 1px dashed var(--line-2);
+    display: grid; place-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  /* leaderboard rank */
+  .rank {
+    width: 28px; height: 28px; border-radius: 999px;
+    background: var(--bg-3);
+    display: grid; place-items: center;
+    font-weight: 800; font-size: 12px;
+    color: var(--ink-2);
+  }
+  .rank.gold { background: oklch(0.88 0.13 90); color: oklch(0.32 0.12 70); }
+  .rank.silver { background: oklch(0.88 0.01 80); color: oklch(0.35 0.01 75); }
+  .rank.bronze { background: oklch(0.82 0.10 50); color: oklch(0.32 0.13 45); }
+
+  /* footer */
+  footer.docfoot {
+    margin-top: 120px;
+    padding-top: 30px;
+    border-top: 1px dashed var(--line-2);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+
+  /* Nav (table of contents) */
+  .toc {
+    position: sticky;
+    top: 16px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: 12px 14px;
+    font-size: 13px;
+    z-index: 10;
+    margin-bottom: 36px;
+  }
+  .toc-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .toc a {
+    color: var(--ink-2);
+    text-decoration: none;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .toc a:hover { background: var(--primary-soft); color: var(--primary-deep); border-color: var(--primary-soft); }
+  .toc .label { color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 6px; font-weight: 500; }
+
+  /* desktop layouts */
+  .dt-grid { display: grid; grid-template-columns: 220px 1fr 280px; gap: 24px; }
+  .dt-side {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    padding: 18px;
+  }
+  .dt-side h4 { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 10px; font-weight: 500; }
+  .dt-nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 11px; border-radius: 10px;
+    font-size: 13px; font-weight: 600; color: var(--ink-2);
+    margin-bottom: 2px; cursor: pointer;
+  }
+  .dt-nav-item.active { background: var(--primary-soft); color: var(--primary-deep); }
+  .dt-nav-item svg { width: 16px; height: 16px; }
+</style>
+</head>
+<body>
+<div class="doc" data-screen-label="Spec doc">
+
+  <!-- ─────────────────────── HERO ─────────────────────── -->
+  <header class="hero">
+    <div>
+      <div class="eyebrow"><span class="dot"></span> Bounty · Design spec v0.1 · May 2026</div>
+      <h1 class="title">A social wager app for groups who can't take a <em>dare</em>.</h1>
+      <p class="lede">A gamified, group-private bounty board: post a dare, set a price, watch your friends squirm. This document defines the screens, visual system, Angular component tree, and Firestore data model — followed by mid-fi mockups of every primary screen.</p>
+    </div>
+    <aside class="meta-card">
+      <dl>
+        <dt>Stack</dt><dd>Angular · Firebase</dd>
+        <dt>Form factor</dt><dd>Mobile-first, responsive</dd>
+        <dt>Money model</dt><dd>Honor-system IOU</dd>
+        <dt>Fidelity</dt><dd>Mid-fi mockups</dd>
+        <dt>Audience</dt><dd>Private groups (5–30)</dd>
+      </dl>
+    </aside>
+  </header>
+
+  <nav class="toc">
+    <div class="toc-row">
+      <span class="label">Jump to</span>
+      <a href="#flow">01 · Flow</a>
+      <a href="#ux">02 · UX/UI</a>
+      <a href="#ng">03 · Angular</a>
+      <a href="#fb">04 · Firebase</a>
+      <a href="#mockups">05 · Mockups</a>
+    </div>
+  </nav>
+
+  <!-- ─────────────────────── 01 FLOW ─────────────────────── -->
+  <section class="spec" id="flow">
+    <div class="sec-head">
+      <span class="sec-num">01</span>
+      <h2 class="sec-title">User flow &amp; screen breakdown</h2>
+    </div>
+    <p class="sec-sub">Twelve screens cover the full lifecycle. Numbered roughly in the order a new user would meet them. <strong>OP</strong> = Original Poster (the user who created the bounty).</p>
+
+    <div class="card">
+
+      <div class="screen-row">
+        <div class="idx">01</div>
+        <div><div class="name">Login / Auth <small>route: /login</small></div></div>
+        <div class="body">
+          <p>Third-party SSO only (Google, Apple). Gates the entire app behind <code>AuthGuard</code>.</p>
+          <ul>
+            <li><strong>Elements:</strong> wordmark, one-line value prop, "Continue with Google", "Continue with Apple", T&amp;C link.</li>
+            <li><strong>Actions:</strong> sign in → redirect to previous deep link or <code>/groups</code>.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="screen-row">
+        <div class="idx">02</div>
+        <div><div class="name">Group hub <small>route: /groups</small></div></div>
+        <div class="body">
+          <p>Landing screen post-login. Shows every group the user belongs to with live activity counts.</p>
+          <ul>
+            <li><strong>Elements:</strong> group cards (name, member count, unread bounty count, your rank), CTA "Create group", CTA "Join by code".</li>
+            <li><strong>Actions:</strong> tap card → group, create new, join existing via 6-char invite code.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="screen-row">
+        <div class="idx">03</div>
+        <div><div class="name">Active bounty feed <small>route: /g/:groupId</small></div></div>
+        <div class="body">
+          <p>The main screen. Real-time list of active bounties in the selected group, sorted newest first by default.</p>
+          <ul>
+            <li><strong>Elements:</strong> sticky group header (name, member chips, leaderboard link), filter pills (All · Available · Mine · Claimed), bounty cards, FAB "+ Post bounty".</li>
+            <li><strong>Actions:</strong> filter, tap card → detail, FAB → create flow, pull-to-refresh.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="screen-row">
+        <div class="idx">04</div>
+        <div><div class="name">Bounty detail <small>route: /g/:groupId/b/:bountyId</small></div></div>
+        <div class="body">
+          <p>Full detail of one bounty plus its current state machine context.</p>
+          <ul>
+            <li><strong>Elements:</strong> title, description, price chip, expiration countdown, state badge with icon, OP avatar + name, current claimant (if any), activity timeline, contextual CTA.</li>
+            <li><strong>Actions vary by viewer + state:</strong> Claim · Submit proof · Withdraw claim · Approve · Reject · Delete (OP only, while Available).</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="screen-row">
+        <div class="idx">05</div>
+        <div><div class="name">Create bounty <small>route: /g/:groupId/new</small></div></div>
+        <div class="body">
+          <p>Single-step form. Keep friction low — most bounties are written on a whim.</p>
+          <ul>
+            <li><strong>Elements:</strong> Title, Description (multiline), Price ($), Expiration (date+time picker, sensible default = 7 days), proof-required toggle, "Post" CTA.</li>
+            <li><strong>Actions:</strong> submit, save draft (auto), cancel.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="screen-row">
+        <div class="idx">06</div>
+        <div><div class="name">Claim &amp; proof submission <small>route: /g/:groupId/b/:bountyId/submit</small></div></div>
+        <div class="body">
+          <p>Where the claimant proves they actually did the thing. Required before the OP can review.</p>
+          <ul>
+            <li><strong>Elements:</strong> bounty summary, photo/video upload (up to 3), short note field, "Submit for review" CTA.</li>
+            <li><strong>Actions:</strong> upload, write note, submit → bounty enters <code>pending_review</code>.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="screen-row">
+        <div class="idx">07</div>
+        <div><div class="name">OP review queue <small>route: /reviews</small></div></div>
+        <div class="body">
+          <p>Cross-group inbox of every claim awaiting <em>your</em> approval (you posted the bounty). Notification badge in tab bar.</p>
+          <ul>
+            <li><strong>Elements:</strong> queue of pending reviews grouped by group, each row shows claimant, bounty title, price, proof preview.</li>
+            <li><strong>Actions:</strong> tap row → review modal, approve, reject (with optional reason).</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="screen-row">
+        <div class="idx">08</div>
+        <div><div class="name">Review detail (approve/reject) <small>modal over /reviews</small></div></div>
+        <div class="body">
+          <p>Focused decision view. Shows full proof at viewable size.</p>
+          <ul>
+            <li><strong>Elements:</strong> proof gallery, claimant note, bounty rules recap, payout preview ("+30 pts &amp; you owe @nora $30"), Reject / Approve buttons.</li>
+            <li><strong>Actions:</strong> approve (success path), reject with reason (failure path).</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="screen-row">
+        <div class="idx">09</div>
+        <div><div class="name">Leaderboard <small>route: /g/:groupId/leaderboard</small></div></div>
+        <div class="body">
+          <p>Per-group standings. Real-time, denormalized for speed.</p>
+          <ul>
+            <li><strong>Elements:</strong> top-3 podium, ranked list (avatar, name, points, W/L, net IOU), time-range tabs (All time · This month · This week).</li>
+            <li><strong>Actions:</strong> tap row → user profile, share leaderboard image.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="screen-row">
+        <div class="idx">10</div>
+        <div><div class="name">User profile <small>route: /u/:userId</small></div></div>
+        <div class="body">
+          <p>Per-user record. Public within shared groups.</p>
+          <ul>
+            <li><strong>Elements:</strong> avatar, name, total points, win/loss/abandon counts, biggest score, history list, net IOU per counterparty.</li>
+            <li><strong>Actions:</strong> view bounty history, "Mark as settled" on individual IOUs (both parties must confirm).</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="screen-row">
+        <div class="idx">11</div>
+        <div><div class="name">Group settings <small>route: /g/:groupId/settings</small></div></div>
+        <div class="body">
+          <p>Admin tools for the group owner; lighter view for members.</p>
+          <ul>
+            <li><strong>Elements:</strong> group name, avatar/emoji, invite code (regenerable), member list with roles, leave/delete group, default bounty expiration.</li>
+            <li><strong>Actions:</strong> rename, regenerate invite, promote/remove member, leave, delete (owner only).</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="screen-row">
+        <div class="idx">12</div>
+        <div><div class="name">Notifications <small>route: /inbox</small></div></div>
+        <div class="body">
+          <p>Cross-group activity stream: claims on your bounties, decisions on your claims, leaderboard rank changes, expirations.</p>
+          <ul>
+            <li><strong>Elements:</strong> grouped list by day, unread state, deep-link to each item.</li>
+            <li><strong>Actions:</strong> tap to deep-link, mark all read.</li>
+          </ul>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ─────────────────────── 02 UX ─────────────────────── -->
+  <section class="spec" id="ux">
+    <div class="sec-head">
+      <span class="sec-num">02</span>
+      <h2 class="sec-title">UX / UI recommendations</h2>
+    </div>
+    <p class="sec-sub">Calm chrome, loud moments. The layout stays clean and library-grade so people can scan a feed quickly; the gamified beats (price, points, podium, state changes) are where we turn up the volume.</p>
+
+    <h3>Palette</h3>
+    <p>Warm cream surfaces over a soft-ink near-black. Tangerine is the brand accent and primary CTA. State colors share a single chroma so badges sit comfortably next to one another.</p>
+    <div class="swatches" style="margin-top: 8px;">
+      <div class="sw"><div class="chip" style="background: var(--bg)"></div><div class="meta"><b>Cream</b><code>--bg</code></div></div>
+      <div class="sw"><div class="chip" style="background: var(--ink)"></div><div class="meta"><b>Ink</b><code>--ink</code></div></div>
+      <div class="sw"><div class="chip" style="background: var(--primary)"></div><div class="meta"><b>Tangerine</b><code>--primary</code></div></div>
+      <div class="sw"><div class="chip" style="background: var(--success)"></div><div class="meta"><b>Win green</b><code>--success</code></div></div>
+      <div class="sw"><div class="chip" style="background: var(--danger)"></div><div class="meta"><b>Fail red</b><code>--danger</code></div></div>
+      <div class="sw"><div class="chip" style="background: var(--purple)"></div><div class="meta"><b>Review purple</b><code>--purple</code></div></div>
+    </div>
+
+    <h3>Typography</h3>
+    <div class="grid-2">
+      <div class="card">
+        <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 38px; line-height: 1; letter-spacing: -0.02em;">Bricolage Grotesque</div>
+        <p style="margin-top: 10px;">Display + section headers + prices. A friendly grotesque with optical sizing — feels playful at large sizes, settles down at small ones.</p>
+      </div>
+      <div class="card">
+        <div style="font-family: 'Plus Jakarta Sans'; font-weight: 600; font-size: 22px;">Plus Jakarta Sans</div>
+        <p style="margin-top: 10px;">Body, UI labels, buttons. Rounded terminals soften the interface without going full marshmallow. Weights 400/500/600/700/800.</p>
+      </div>
+    </div>
+    <p style="margin-top: 14px;">Numerals use the display face — prices and points are loud on purpose. Mono (JetBrains Mono) reserved for invite codes, timestamps, and dev-flavored UI accents.</p>
+
+    <h3>Layout structure</h3>
+    <ul>
+      <li><strong>Mobile (primary):</strong> single-column feed, sticky group header, bottom tab bar (Feed · Reviews · Post · Leaderboard · Profile).</li>
+      <li><strong>Desktop:</strong> three-pane (left nav · feed · right rail w/ leaderboard + activity). Same primitives, more density.</li>
+      <li><strong>Cards over chrome:</strong> bounty cards are the unit of composition — feed, profile, reviews, and leaderboard all reuse them.</li>
+      <li><strong>Spacing rhythm:</strong> 4 / 8 / 12 / 16 / 22 / 36 px scale. Radii: 10 / 14 / 20 / 28.</li>
+    </ul>
+
+    <h3>Distinguishing bounty states</h3>
+    <p>Five visual states, each with a distinct icon + soft tint pair. The icon is the load-bearing signal (works in greyscale, accessible, scannable at thumb distance); the tint just reinforces it. Never use color alone.</p>
+    <div class="states" style="margin-top: 14px;">
+      <div class="state-cell">
+        <div class="state-icon s-available"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg></div>
+        <b>Available</b>
+        <span>Open for anyone to claim. Blue target.</span>
+      </div>
+      <div class="state-cell">
+        <div class="state-icon s-claimed"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg></div>
+        <b>In progress</b>
+        <span>Claimed, working on it. Lightning bolt.</span>
+      </div>
+      <div class="state-cell">
+        <div class="state-icon s-pending"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></div>
+        <b>Pending review</b>
+        <span>OP needs to decide. Watching eye.</span>
+      </div>
+      <div class="state-cell">
+        <div class="state-icon s-success"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7 9 18l-5-5"/></svg></div>
+        <b>Successful</b>
+        <span>Approved, points awarded. Checkmark.</span>
+      </div>
+      <div class="state-cell">
+        <div class="state-icon s-failed"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
+        <b>Failed</b>
+        <span>Rejected or expired. Points docked.</span>
+      </div>
+    </div>
+
+    <h3>Gamification accents</h3>
+    <ul>
+      <li><strong>Points popups:</strong> celebratory toast on approval (<code>+30 pts</code>) with subtle confetti; equivalent shake + <code>-30 pts</code> on rejection (no shaming animation — keep it light).</li>
+      <li><strong>Leaderboard podium:</strong> only screen with a colored background block. Top three get medal-tinted rank chips.</li>
+      <li><strong>Streaks &amp; badges:</strong> earned silently, shown on profile. Don't push notifications for them.</li>
+    </ul>
+
+    <h3>Accessibility</h3>
+    <ul>
+      <li>WCAG AA contrast (text ≥ 4.5:1) verified across all state badges on cream and white surfaces.</li>
+      <li>State changes announced via <code>aria-live="polite"</code>; icon labels never elided.</li>
+      <li>Hit targets ≥ 44 × 44 px on mobile. Reduced-motion respected — confetti disabled.</li>
+    </ul>
+  </section>
+
+  <!-- ─────────────────────── 03 ANGULAR ─────────────────────── -->
+  <section class="spec" id="ng">
+    <div class="sec-head">
+      <span class="sec-num">03</span>
+      <h2 class="sec-title">Angular component architecture</h2>
+    </div>
+    <p class="sec-sub">Standalone components, lazy-loaded feature routes, smart/presentational split. Smart components own data + dispatch; presentational components take inputs and emit outputs. Services own Firestore I/O so the tree stays testable.</p>
+
+    <div style="display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;">
+      <span class="pill smart">●  smart (container)</span>
+      <span class="pill dumb">●  dumb (presentational)</span>
+      <span class="pill svc">●  service</span>
+      <span class="pill guard">●  guard / interceptor</span>
+    </div>
+
+    <pre class="tree"><span class="c">// src/app</span>
+AppComponent                                              <span class="c">// shell, router-outlet</span>
+├── <span class="k">core/</span>                                              <span class="c">// providers, singletons</span>
+│   ├── AuthService              <span class="c">[svc]</span>                <span class="c">// firebase/auth wrapper</span>
+│   ├── FirestoreService         <span class="c">[svc]</span>                <span class="c">// generic CRUD + collectionData$</span>
+│   ├── BountyService            <span class="c">[svc]</span>                <span class="c">// claim/approve/reject orchestration</span>
+│   ├── GroupService             <span class="c">[svc]</span>                <span class="c">// membership, invites</span>
+│   ├── PointsService            <span class="c">[svc]</span>                <span class="c">// reads leaderboard subdocs</span>
+│   ├── NotificationService      <span class="c">[svc]</span>                <span class="c">// FCM tokens + inbox</span>
+│   ├── AuthGuard                <span class="c">[guard]</span>              <span class="c">// requires signed-in user</span>
+│   ├── GroupMembershipGuard     <span class="c">[guard]</span>              <span class="c">// requires membership in :groupId</span>
+│   └── ErrorInterceptor         <span class="c">[guard]</span>              <span class="c">// toast on Firestore errors</span>
+│
+├── <span class="k">shared/</span>                                            <span class="c">// reusable dumb components</span>
+│   ├── BountyCardComponent              <span class="c">[dumb]</span>       <span class="c">// @Input bounty, @Output claim/open</span>
+│   ├── BountyStateBadgeComponent        <span class="c">[dumb]</span>       <span class="c">// icon + tint per state</span>
+│   ├── PriceTagComponent                <span class="c">[dumb]</span>       <span class="c">// formatted $ amount</span>
+│   ├── CountdownPipe                    <span class="c">[dumb]</span>       <span class="c">// human-readable expiration</span>
+│   ├── AvatarComponent                  <span class="c">[dumb]</span>       <span class="c">// initial bubble or photo</span>
+│   ├── EmptyStateComponent              <span class="c">[dumb]</span>
+│   ├── ConfirmDialogComponent           <span class="c">[dumb]</span>
+│   ├── ToastComponent                   <span class="c">[dumb]</span>
+│   └── ProofThumbnailComponent          <span class="c">[dumb]</span>
+│
+├── <span class="k">features/</span>
+│   │
+│   ├── <span class="k">auth/</span>
+│   │   └── LoginPageComponent             <span class="s">[smart]</span>    <span class="c">// SSO buttons → AuthService</span>
+│   │
+│   ├── <span class="k">groups/</span>
+│   │   ├── GroupListPageComponent         <span class="s">[smart]</span>
+│   │   │   ├── GroupTileComponent              <span class="c">[dumb]</span>
+│   │   │   └── JoinGroupSheetComponent         <span class="c">[dumb]</span>
+│   │   ├── CreateGroupPageComponent       <span class="s">[smart]</span>
+│   │   └── GroupSettingsPageComponent     <span class="s">[smart]</span>
+│   │       ├── MemberRowComponent              <span class="c">[dumb]</span>
+│   │       └── InviteCodeBlockComponent        <span class="c">[dumb]</span>
+│   │
+│   ├── <span class="k">bounties/</span>
+│   │   ├── BountyFeedPageComponent        <span class="s">[smart]</span>    <span class="c">// streams bounties$ via Firestore</span>
+│   │   │   ├── FeedFilterBarComponent          <span class="c">[dumb]</span>
+│   │   │   └── BountyCardComponent             <span class="c">[dumb]</span>  <span class="c">// (from shared)</span>
+│   │   ├── BountyDetailPageComponent      <span class="s">[smart]</span>
+│   │   │   ├── BountyHeaderComponent           <span class="c">[dumb]</span>
+│   │   │   ├── ActivityTimelineComponent       <span class="c">[dumb]</span>
+│   │   │   └── BountyActionBarComponent        <span class="c">[dumb]</span>  <span class="c">// CTA varies by state + viewer</span>
+│   │   ├── CreateBountyPageComponent      <span class="s">[smart]</span>
+│   │   │   └── BountyFormComponent             <span class="c">[dumb]</span>
+│   │   └── ClaimSubmitPageComponent       <span class="s">[smart]</span>
+│   │       └── ProofUploaderComponent          <span class="c">[dumb]</span>
+│   │
+│   ├── <span class="k">reviews/</span>
+│   │   ├── ReviewQueuePageComponent       <span class="s">[smart]</span>    <span class="c">// cross-group inbox</span>
+│   │   │   └── ReviewRowComponent              <span class="c">[dumb]</span>
+│   │   └── ReviewDetailDialogComponent    <span class="s">[smart]</span>    <span class="c">// approve / reject</span>
+│   │       └── ProofGalleryComponent           <span class="c">[dumb]</span>
+│   │
+│   ├── <span class="k">leaderboard/</span>
+│   │   └── LeaderboardPageComponent       <span class="s">[smart]</span>
+│   │       ├── PodiumComponent                 <span class="c">[dumb]</span>
+│   │       └── LeaderboardRowComponent         <span class="c">[dumb]</span>
+│   │
+│   ├── <span class="k">profile/</span>
+│   │   └── UserProfilePageComponent       <span class="s">[smart]</span>
+│   │       ├── ProfileStatsComponent           <span class="c">[dumb]</span>
+│   │       ├── IouLedgerComponent              <span class="c">[dumb]</span>
+│   │       └── BountyHistoryListComponent      <span class="c">[dumb]</span>
+│   │
+│   └── <span class="k">inbox/</span>
+│       └── NotificationsPageComponent     <span class="s">[smart]</span>
+│           └── NotificationRowComponent        <span class="c">[dumb]</span>
+│
+└── <span class="k">layout/</span>
+    ├── AppShellComponent                  <span class="s">[smart]</span>    <span class="c">// holds tab bar + header on mobile</span>
+    ├── BottomTabBarComponent                   <span class="c">[dumb]</span>
+    └── DesktopSidebarComponent                 <span class="c">[dumb]</span></pre>
+
+    <h3>Responsibility notes</h3>
+    <div class="grid-2">
+      <div class="card">
+        <h4>Smart container rules</h4>
+        <ul>
+          <li>Inject services; expose <code>Observable</code>s to the template via <code>async</code> pipe — no manual subscriptions.</li>
+          <li>Own all dispatch: receive <code>(@Output)</code> from children, translate into service calls.</li>
+          <li>Never render UI directly — compose from presentational components only.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Presentational rules</h4>
+        <ul>
+          <li><code>ChangeDetectionStrategy.OnPush</code>. Inputs are immutable.</li>
+          <li>No service injection (except <code>TranslocoService</code>-style infra).</li>
+          <li>Style files colocated; documented in Storybook with every state variant.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>Routing &amp; guards</h3>
+    <pre class="code">{ path: <span class="s">'login'</span>, loadComponent: () =&gt; <span class="k">import</span>(<span class="s">'./features/auth/login.page'</span>) },
+{ path: <span class="s">''</span>, canActivate: [<span class="k">AuthGuard</span>], children: [
+  { path: <span class="s">'groups'</span>,    loadChildren: () =&gt; <span class="k">import</span>(<span class="s">'./features/groups'</span>) },
+  { path: <span class="s">'reviews'</span>,   loadChildren: () =&gt; <span class="k">import</span>(<span class="s">'./features/reviews'</span>) },
+  { path: <span class="s">'inbox'</span>,     loadChildren: () =&gt; <span class="k">import</span>(<span class="s">'./features/inbox'</span>) },
+  { path: <span class="s">'u/:userId'</span>, loadComponent: () =&gt; <span class="k">import</span>(<span class="s">'./features/profile/user-profile.page'</span>) },
+  { path: <span class="s">'g/:groupId'</span>, canActivate: [<span class="k">GroupMembershipGuard</span>], children: [
+    { path: <span class="s">''</span>,            loadComponent: () =&gt; <span class="k">import</span>(<span class="s">'./features/bounties/feed.page'</span>) },
+    { path: <span class="s">'new'</span>,         loadComponent: () =&gt; <span class="k">import</span>(<span class="s">'./features/bounties/create.page'</span>) },
+    { path: <span class="s">'leaderboard'</span>, loadComponent: () =&gt; <span class="k">import</span>(<span class="s">'./features/leaderboard/leaderboard.page'</span>) },
+    { path: <span class="s">'settings'</span>,    loadComponent: () =&gt; <span class="k">import</span>(<span class="s">'./features/groups/settings.page'</span>) },
+    { path: <span class="s">'b/:bountyId'</span>, children: [
+      { path: <span class="s">''</span>,        loadComponent: () =&gt; <span class="k">import</span>(<span class="s">'./features/bounties/detail.page'</span>) },
+      { path: <span class="s">'submit'</span>,  loadComponent: () =&gt; <span class="k">import</span>(<span class="s">'./features/bounties/claim-submit.page'</span>) },
+    ]},
+  ]},
+]}</pre>
+  </section>
+
+  <!-- ─────────────────────── 04 FIREBASE ─────────────────────── -->
+  <section class="spec" id="fb">
+    <div class="sec-head">
+      <span class="sec-num">04</span>
+      <h2 class="sec-title">Firebase data model</h2>
+    </div>
+    <p class="sec-sub">Five top-level collections, with bounties and members nested under groups. Leaderboards are denormalized into a per-group subdocument and updated transactionally on approval/rejection — that keeps reads to a single document and avoids fan-out aggregation on every render.</p>
+
+    <h3>Collection tree</h3>
+    <pre class="tree"><span class="k">users/</span>{userId}                          <span class="c">// public profile, points totals</span>
+<span class="k">groups/</span>{groupId}                        <span class="c">// group metadata + invite code</span>
+  ├── <span class="k">members/</span>{userId}                 <span class="c">// per-group role, joinedAt, points-in-group</span>
+  ├── <span class="k">bounties/</span>{bountyId}              <span class="c">// state machine doc</span>
+  │   └── <span class="k">activity/</span>{eventId}           <span class="c">// timeline log</span>
+  └── <span class="k">leaderboard/</span>summary             <span class="c">// single doc, denormalized rankings</span>
+<span class="k">notifications/</span>{userId}/inbox/{id}      <span class="c">// per-user inbox docs</span>
+<span class="k">ious/</span>{iouId}                            <span class="c">// pairwise debts, both-party confirm</span></pre>
+
+    <h3><code>users/{userId}</code></h3>
+    <table class="schema">
+      <thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="f">uid</td><td class="t">string</td><td class="d">Firebase Auth uid (= document id)</td></tr>
+        <tr><td class="f">displayName</td><td class="t">string</td><td class="d">user-editable</td></tr>
+        <tr><td class="f">handle</td><td class="t">string</td><td class="d">unique, lowercase, indexed</td></tr>
+        <tr><td class="f">photoURL</td><td class="t">string?</td><td class="d">from SSO provider</td></tr>
+        <tr><td class="f">groupIds</td><td class="t">string[]</td><td class="d">denormalized for cheap "my groups" reads</td></tr>
+        <tr><td class="f">totalPoints</td><td class="t">number</td><td class="d">sum across all groups</td></tr>
+        <tr><td class="f">createdAt</td><td class="t">timestamp</td><td class="d"></td></tr>
+      </tbody>
+    </table>
+
+    <h3><code>groups/{groupId}</code></h3>
+    <table class="schema">
+      <thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="f">name</td><td class="t">string</td><td class="d"></td></tr>
+        <tr><td class="f">emoji</td><td class="t">string?</td><td class="d">single grapheme avatar</td></tr>
+        <tr><td class="f">ownerId</td><td class="t">string</td><td class="d">user uid</td></tr>
+        <tr><td class="f">inviteCode</td><td class="t">string</td><td class="d">6 chars, unique index, regenerable</td></tr>
+        <tr><td class="f">memberCount</td><td class="t">number</td><td class="d">denormalized, updated via Cloud Function</td></tr>
+        <tr><td class="f">activeBountyCount</td><td class="t">number</td><td class="d">denormalized</td></tr>
+        <tr><td class="f">defaultExpiryDays</td><td class="t">number</td><td class="d">default 7</td></tr>
+        <tr><td class="f">createdAt</td><td class="t">timestamp</td><td class="d"></td></tr>
+      </tbody>
+    </table>
+
+    <h3><code>groups/{groupId}/members/{userId}</code></h3>
+    <table class="schema">
+      <thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="f">role</td><td class="t">"owner" | "admin" | "member"</td><td class="d"></td></tr>
+        <tr><td class="f">joinedAt</td><td class="t">timestamp</td><td class="d"></td></tr>
+        <tr><td class="f">points</td><td class="t">number</td><td class="d">in-group points (the leaderboard number)</td></tr>
+        <tr><td class="f">wins</td><td class="t">number</td><td class="d"></td></tr>
+        <tr><td class="f">losses</td><td class="t">number</td><td class="d"></td></tr>
+        <tr><td class="f">displayName</td><td class="t">string</td><td class="d">cached for joinless reads</td></tr>
+        <tr><td class="f">photoURL</td><td class="t">string?</td><td class="d">cached</td></tr>
+      </tbody>
+    </table>
+
+    <h3><code>groups/{groupId}/bounties/{bountyId}</code></h3>
+    <table class="schema">
+      <thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="f">title</td><td class="t">string</td><td class="d">≤ 80 chars</td></tr>
+        <tr><td class="f">description</td><td class="t">string</td><td class="d">≤ 1000 chars</td></tr>
+        <tr><td class="f">price</td><td class="t">number</td><td class="d">integer, ≥ 1</td></tr>
+        <tr><td class="f">currency</td><td class="t">string</td><td class="d">default "USD" — display only</td></tr>
+        <tr><td class="f">state</td><td class="t">enum</td><td class="d"><code>available</code> · <code>claimed</code> · <code>pending_review</code> · <code>successful</code> · <code>failed</code> · <code>expired</code></td></tr>
+        <tr><td class="f">posterId</td><td class="t">string</td><td class="d">the OP</td></tr>
+        <tr><td class="f">claimantId</td><td class="t">string?</td><td class="d">null when available</td></tr>
+        <tr><td class="f">proof</td><td class="t">{ urls: string[]; note: string }?</td><td class="d">written when claimant submits</td></tr>
+        <tr><td class="f">expiresAt</td><td class="t">timestamp</td><td class="d">indexed for scheduled expiry function</td></tr>
+        <tr><td class="f">createdAt</td><td class="t">timestamp</td><td class="d"></td></tr>
+        <tr><td class="f">resolvedAt</td><td class="t">timestamp?</td><td class="d">set when state ∈ {successful, failed, expired}</td></tr>
+        <tr><td class="f">rejectionReason</td><td class="t">string?</td><td class="d">optional, supplied by OP</td></tr>
+      </tbody>
+    </table>
+
+    <h3><code>groups/{groupId}/leaderboard/summary</code></h3>
+    <p>Single document, rewritten transactionally whenever a bounty resolves. Cap to ~100 entries (the per-group cardinality is small).</p>
+    <table class="schema">
+      <tbody>
+        <tr><td class="f">entries</td><td class="t">{ userId, name, photoURL, points, wins, losses }[]</td><td class="d">sorted desc by points; rewritten on every resolution</td></tr>
+        <tr><td class="f">updatedAt</td><td class="t">timestamp</td><td class="d"></td></tr>
+      </tbody>
+    </table>
+
+    <h3><code>ious/{iouId}</code></h3>
+    <table class="schema">
+      <tbody>
+        <tr><td class="f">groupId</td><td class="t">string</td><td class="d">scope</td></tr>
+        <tr><td class="f">debtorId</td><td class="t">string</td><td class="d">the OP, who owes the claimant</td></tr>
+        <tr><td class="f">creditorId</td><td class="t">string</td><td class="d">the claimant</td></tr>
+        <tr><td class="f">amount</td><td class="t">number</td><td class="d">bounty price</td></tr>
+        <tr><td class="f">bountyId</td><td class="t">string</td><td class="d">source</td></tr>
+        <tr><td class="f">status</td><td class="t">"open" | "debtor_marked" | "creditor_marked" | "settled"</td><td class="d">two-sided confirmation</td></tr>
+        <tr><td class="f">createdAt</td><td class="t">timestamp</td><td class="d"></td></tr>
+        <tr><td class="f">settledAt</td><td class="t">timestamp?</td><td class="d"></td></tr>
+      </tbody>
+    </table>
+
+    <h3>Approval workflow (Cloud Function, transactional)</h3>
+    <ol>
+      <li>Client calls <code>approveBounty(bountyId)</code> — callable function, OP-only enforced server-side.</li>
+      <li>Transaction reads bounty + claimant member doc + leaderboard summary.</li>
+      <li>Writes: bounty.state = <code>successful</code> + <code>resolvedAt</code>; claimant.points += price, .wins += 1; new IOU doc; leaderboard entries re-sorted; activity event appended.</li>
+      <li>Trigger creates inbox docs for both parties; reject path mirrors with <code>failed</code>, .losses += 1, .points -= price, no IOU.</li>
+    </ol>
+
+    <h3>Security rules (sketch)</h3>
+    <pre class="code"><span class="k">match</span> /groups/{gid} {
+  <span class="k">allow read</span>:  <span class="k">if</span> isMember(gid);
+  <span class="k">allow create</span>: <span class="k">if</span> request.auth.uid == request.resource.data.ownerId;
+  <span class="k">allow update</span>: <span class="k">if</span> isOwner(gid) || isAdmin(gid);
+
+  <span class="k">match</span> /bounties/{bid} {
+    <span class="k">allow read</span>:   <span class="k">if</span> isMember(gid);
+    <span class="k">allow create</span>: <span class="k">if</span> isMember(gid)
+                     &amp;&amp; request.resource.data.posterId == request.auth.uid
+                     &amp;&amp; request.resource.data.state == <span class="s">'available'</span>;
+    <span class="c">// state transitions are CF-only — clients cannot write `state` directly</span>
+    <span class="k">allow update</span>: <span class="k">if</span> <span class="n">false</span>;
+    <span class="k">allow delete</span>: <span class="k">if</span> resource.data.posterId == request.auth.uid
+                     &amp;&amp; resource.data.state == <span class="s">'available'</span>;
+  }
+
+  <span class="k">match</span> /leaderboard/summary {
+    <span class="k">allow read</span>:   <span class="k">if</span> isMember(gid);
+    <span class="k">allow write</span>:  <span class="k">if</span> <span class="n">false</span>;   <span class="c">// CF-only</span>
+  }
+}
+
+<span class="k">function</span> isMember(gid) {
+  <span class="k">return</span> exists(/databases/$(database)/documents/groups/$(gid)/members/$(request.auth.uid));
+}</pre>
+
+    <h3>Index strategy</h3>
+    <ul>
+      <li><strong>Composite:</strong> <code>bounties</code> on <code>(state asc, createdAt desc)</code> for the feed; <code>(posterId, state)</code> for the OP review queue.</li>
+      <li><strong>TTL:</strong> on <code>bounties.expiresAt</code> + scheduled Cloud Function that flips unclaimed bounties to <code>expired</code> nightly.</li>
+      <li><strong>Avoid:</strong> client-side aggregation across all bounties for the leaderboard — read the summary doc instead.</li>
+    </ul>
+  </section>
+
+  <!-- ─────────────────────── 05 MOCKUPS ─────────────────────── -->
+  <div class="gallery-head" id="mockups">
+    <div class="left">
+      <div class="tag">05 · Visual mockups</div>
+      <h2>The screens, at mid-fi</h2>
+      <p style="margin: 0; color: var(--ink-2);">Real type, real states, simple components. Mobile (320 × 660) is primary; three desktop adaptations follow. Imagery shown as striped placeholders.</p>
+    </div>
+  </div>
+
+  <!-- ───────── MOBILE GRID ───────── -->
+  <div class="device-grid">
+
+    <!-- 01 LOGIN -->
+    <div class="device-cell" data-screen-label="Mobile · Login">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="statusbar"><span>9:41</span><span class="right">●●●●</span></div>
+          <div class="body" style="display: flex; flex-direction: column; padding: 24px 22px;">
+            <div style="height: 80px;"></div>
+            <div style="font-family: 'Bricolage Grotesque'; font-size: 56px; font-weight: 800; line-height: 0.9; letter-spacing: -0.03em;">Bounty<span style="color: var(--primary);">.</span></div>
+            <p style="margin-top: 16px; font-size: 15px; color: var(--ink-2); text-wrap: pretty;">Dares with a price tag. Your group, your rules, your shame.</p>
+            <div style="flex: 1;"></div>
+            <button class="btn full" style="background: #111;">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="white"><path d="M19.5 13.5h-7v-3h4a4 4 0 1 0-1.2-2.8l-2-2A6.99 6.99 0 1 1 19.5 13.5z"/></svg>
+              Continue with Google
+            </button>
+            <div style="height: 10px;"></div>
+            <button class="btn full" style="background: #111;">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="white"><path d="M17.5 12.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2-3.9-2.1-1.7-.2-3.2 1-4.1 1-.8 0-2.1-1-3.5-1-1.8 0-3.5 1.1-4.4 2.7-1.9 3.3-.5 8.1 1.4 10.8.9 1.3 2 2.7 3.4 2.7 1.4-.1 1.9-.9 3.5-.9s2.1.9 3.5.9c1.5 0 2.4-1.3 3.3-2.6 1-1.5 1.5-3 1.5-3-.1 0-2.9-1.1-3-4.4zM14.6 4.3c.7-.9 1.2-2.1 1.1-3.3-1 0-2.3.7-3 1.5-.7.8-1.3 2-1.1 3.2 1.1.1 2.3-.5 3-1.4z"/></svg>
+              Continue with Apple
+            </button>
+            <div style="height: 28px;"></div>
+            <p style="text-align: center; font-size: 11px; color: var(--muted); margin: 0;">By continuing you agree to the <u>Terms</u> &amp; <u>Privacy</u>.</p>
+            <div style="height: 12px;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="caption"><b>01 · Login</b>SSO only, gates the app</div>
+    </div>
+
+    <!-- 02 GROUP HUB -->
+    <div class="device-cell" data-screen-label="Mobile · Group hub">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="statusbar"><span>9:41</span><span class="right">●●●●</span></div>
+          <div class="body">
+            <div class="topbar">
+              <div>
+                <h2>Groups</h2>
+                <div class="sub">3 active · 12 unread</div>
+              </div>
+              <div class="avatar v3">RM</div>
+            </div>
+
+            <div class="card" style="padding: 14px; margin-bottom: 10px;">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 44px; height: 44px; border-radius: 14px; background: var(--primary-soft); display: grid; place-items: center; font-size: 22px;">🍻</div>
+                <div style="flex: 1;">
+                  <div style="font-weight: 700; font-size: 15px;">The Pub Quiz</div>
+                  <div style="font-size: 12px; color: var(--muted);">8 members · you're #2</div>
+                </div>
+                <div style="background: var(--primary); color: white; font-weight: 700; font-size: 11px; padding: 3px 8px; border-radius: 999px;">5</div>
+              </div>
+            </div>
+
+            <div class="card" style="padding: 14px; margin-bottom: 10px;">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 44px; height: 44px; border-radius: 14px; background: var(--info-soft); display: grid; place-items: center; font-size: 22px;">💼</div>
+                <div style="flex: 1;">
+                  <div style="font-weight: 700; font-size: 15px;">Office shenanigans</div>
+                  <div style="font-size: 12px; color: var(--muted);">14 members · you're #1 🥇</div>
+                </div>
+                <div style="background: var(--primary); color: white; font-weight: 700; font-size: 11px; padding: 3px 8px; border-radius: 999px;">7</div>
+              </div>
+            </div>
+
+            <div class="card" style="padding: 14px; margin-bottom: 14px;">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 44px; height: 44px; border-radius: 14px; background: var(--success-soft); display: grid; place-items: center; font-size: 22px;">🏔️</div>
+                <div style="flex: 1;">
+                  <div style="font-weight: 700; font-size: 15px;">Ski trip 2026</div>
+                  <div style="font-size: 12px; color: var(--muted);">6 members · you're #4</div>
+                </div>
+              </div>
+            </div>
+
+            <button class="btn full"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="white" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg> Create group</button>
+            <div style="height: 8px;"></div>
+            <button class="btn full ghost">Join by code</button>
+          </div>
+          <div class="tabbar">
+            <div class="tab active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9 12 2l9 7v12H3z"/></svg>Groups</div>
+            <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>Reviews</div>
+            <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Post</div>
+            <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>Ranks</div>
+            <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/></svg>Me</div>
+          </div>
+        </div>
+      </div>
+      <div class="caption"><b>02 · Group hub</b>Pick your battlefield</div>
+    </div>
+
+    <!-- 03 FEED -->
+    <div class="device-cell" data-screen-label="Mobile · Bounty feed">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="statusbar"><span>9:41</span><span class="right">●●●●</span></div>
+          <div class="body">
+            <div class="topbar">
+              <div>
+                <h2 style="display: flex; align-items: center; gap: 6px;">💼 Office</h2>
+                <div class="sub">14 members · 7 active</div>
+              </div>
+              <div class="avatar v3">RM</div>
+            </div>
+            <div style="display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto;">
+              <span class="pill" style="background: var(--ink); color: white;">All · 7</span>
+              <span class="pill">Available · 4</span>
+              <span class="pill">Mine</span>
+              <span class="pill">Claimed</span>
+            </div>
+
+            <div class="bounty-card">
+              <div class="row1">
+                <span class="state-badge s-available"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg> Available</span>
+                <div class="price">$30<small> · 30 pts</small></div>
+              </div>
+              <div class="title-line">Hide in the 3rd floor bathroom for the full 9:30 standup.</div>
+              <div class="row2"><div class="avatar sm v2">NK</div><span>nora · 2h</span><span class="dot"></span><span>5d left</span></div>
+            </div>
+
+            <div class="bounty-card">
+              <div class="row1">
+                <span class="state-badge s-claimed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg> In progress</span>
+                <div class="price">$50<small> · 50 pts</small></div>
+              </div>
+              <div class="title-line">Wear a tie to every meeting this week. Photo proof daily.</div>
+              <div class="row2"><div class="avatar sm v4">DJ</div><span>dan · 1d</span><span class="dot"></span><span>claimed by you</span></div>
+            </div>
+
+            <div class="bounty-card">
+              <div class="row1">
+                <span class="state-badge s-pending"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg> Pending review</span>
+                <div class="price">$15<small> · 15 pts</small></div>
+              </div>
+              <div class="title-line">Send an "all in favor" Slack vote about adding a ping-pong table.</div>
+              <div class="row2"><div class="avatar sm v5">SM</div><span>sam · 3h</span><span class="dot"></span><span>awaiting OP</span></div>
+            </div>
+
+            <div class="bounty-card">
+              <div class="row1">
+                <span class="state-badge s-success"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7 9 18l-5-5"/></svg> Successful</span>
+                <div class="price" style="color: var(--success);">+$25</div>
+              </div>
+              <div class="title-line">Call the CEO by their first name in the all-hands. ✓</div>
+              <div class="row2"><div class="avatar sm v3">RM</div><span>you · yesterday</span></div>
+            </div>
+          </div>
+          <div class="tabbar">
+            <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 9 12 2l9 7v12H3z"/></svg>Groups</div>
+            <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>Reviews</div>
+            <div class="tab active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Post</div>
+            <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>Ranks</div>
+            <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/></svg>Me</div>
+          </div>
+        </div>
+      </div>
+      <div class="caption"><b>03 · Bounty feed</b>The main screen</div>
+    </div>
+
+    <!-- 04 BOUNTY DETAIL -->
+    <div class="device-cell" data-screen-label="Mobile · Bounty detail">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="statusbar"><span>9:41</span><span class="right">●●●●</span></div>
+          <div class="body">
+            <div style="display: flex; align-items: center; gap: 8px; padding: 4px 0 12px;">
+              <div style="width: 32px; height: 32px; border-radius: 10px; background: var(--bg-3); display: grid; place-items: center;">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+              </div>
+              <div style="flex: 1; font-size: 13px; color: var(--muted); font-family: 'JetBrains Mono', monospace;">/office/b/9k2</div>
+            </div>
+
+            <span class="state-badge s-available" style="margin-bottom: 12px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg> Available</span>
+
+            <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 24px; line-height: 1.15; letter-spacing: -0.02em; margin-bottom: 8px;">Hide in the 3rd floor bathroom for the full 9:30 standup.</div>
+            <p style="font-size: 13px; color: var(--ink-2); margin-bottom: 16px;">Stall #2 is the canonical one. Proof = standup attendance roster screenshot showing you absent.</p>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px;">
+              <div style="background: var(--bg-2); border-radius: 14px; padding: 12px;">
+                <div style="font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em;">Price</div>
+                <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 22px; letter-spacing: -0.02em;">$30</div>
+              </div>
+              <div style="background: var(--bg-2); border-radius: 14px; padding: 12px;">
+                <div style="font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em;">Expires</div>
+                <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 22px; letter-spacing: -0.02em;">5d 4h</div>
+              </div>
+            </div>
+
+            <div style="font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px;">Posted by</div>
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
+              <div class="avatar v2">NK</div>
+              <div>
+                <div style="font-weight: 700; font-size: 14px;">Nora K.</div>
+                <div style="font-size: 12px; color: var(--muted);">12 bounties · 89% approval</div>
+              </div>
+            </div>
+
+            <button class="btn full">Claim this bounty</button>
+            <div style="height: 8px;"></div>
+            <button class="btn full ghost">Share</button>
+          </div>
+        </div>
+      </div>
+      <div class="caption"><b>04 · Bounty detail</b>State-aware action bar</div>
+    </div>
+
+    <!-- 05 CREATE -->
+    <div class="device-cell" data-screen-label="Mobile · Create bounty">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="statusbar"><span>9:41</span><span class="right">●●●●</span></div>
+          <div class="body">
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0 16px;">
+              <div style="font-size: 14px; color: var(--muted); font-weight: 600;">Cancel</div>
+              <h2 style="font-family: 'Bricolage Grotesque'; font-size: 18px; margin: 0;">New bounty</h2>
+              <div style="font-size: 14px; color: var(--muted); font-weight: 600;">Draft</div>
+            </div>
+
+            <label class="label">Title</label>
+            <input class="input" value="Eat a whole lemon, peel and all">
+            <div style="height: 14px;"></div>
+
+            <label class="label">The fine print</label>
+            <textarea class="input" rows="3" style="resize: none;">In one sitting. Video proof from start to finish, no cuts. No water.</textarea>
+            <div style="height: 14px;"></div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div>
+                <label class="label">Price</label>
+                <div style="position: relative;">
+                  <span style="position: absolute; left: 14px; top: 12px; font-weight: 700; color: var(--muted);">$</span>
+                  <input class="input" value="25" style="padding-left: 26px; font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 18px;">
+                </div>
+              </div>
+              <div>
+                <label class="label">Expires</label>
+                <input class="input" value="Jun 4, 6:00 PM" style="font-size: 13px;">
+              </div>
+            </div>
+
+            <div style="height: 14px;"></div>
+
+            <div style="background: var(--bg-2); border-radius: 14px; padding: 14px; display: flex; align-items: center; gap: 12px;">
+              <div style="font-size: 13px; font-weight: 600; flex: 1;">Require photo / video proof</div>
+              <div style="width: 38px; height: 22px; background: var(--primary); border-radius: 999px; position: relative;">
+                <div style="position: absolute; right: 2px; top: 2px; width: 18px; height: 18px; background: white; border-radius: 999px;"></div>
+              </div>
+            </div>
+
+            <div style="height: 14px;"></div>
+
+            <div style="background: var(--primary-soft); border-radius: 14px; padding: 12px 14px; font-size: 12px; color: var(--primary-deep); line-height: 1.5;">
+              If approved, you'll owe the claimant <strong>$25</strong> (settled offline) and they'll earn <strong>25 points</strong>.
+            </div>
+
+            <div style="height: 14px;"></div>
+            <button class="btn full">Post to Office</button>
+          </div>
+        </div>
+      </div>
+      <div class="caption"><b>05 · Create bounty</b>Single-step, low friction</div>
+    </div>
+
+    <!-- 06 CLAIM SUBMIT -->
+    <div class="device-cell" data-screen-label="Mobile · Submit proof">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="statusbar"><span>9:41</span><span class="right">●●●●</span></div>
+          <div class="body">
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0 12px;">
+              <div style="width: 32px; height: 32px; border-radius: 10px; background: var(--bg-3); display: grid; place-items: center;">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+              </div>
+              <h2 style="font-family: 'Bricolage Grotesque'; font-size: 17px; margin: 0;">Submit proof</h2>
+              <div style="width: 32px;"></div>
+            </div>
+
+            <div style="background: var(--bg-2); border-radius: 14px; padding: 12px 14px; margin-bottom: 16px;">
+              <div style="font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px;">Bounty</div>
+              <div style="font-weight: 700; font-size: 14px; margin-bottom: 4px;">Wear a tie to every meeting this week.</div>
+              <div style="font-size: 12px; color: var(--muted);">$50 · posted by dan</div>
+            </div>
+
+            <label class="label">Proof (up to 3)</label>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 14px;">
+              <div class="img-ph" style="aspect-ratio: 1;">photo</div>
+              <div class="img-ph" style="aspect-ratio: 1;">photo</div>
+              <div style="aspect-ratio: 1; border: 1.5px dashed var(--line-2); border-radius: 14px; display: grid; place-items: center; color: var(--muted);">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+              </div>
+            </div>
+
+            <label class="label">Note to OP <span style="color: var(--muted); font-weight: 500;">(optional)</span></label>
+            <textarea class="input" rows="3" style="resize: none;">Day 5 of 5 — even rocked it in the 1:1. Receipts attached.</textarea>
+
+            <div style="height: 14px;"></div>
+            <div style="background: var(--purple-soft); border-radius: 14px; padding: 12px 14px; font-size: 12px; color: var(--purple); line-height: 1.5; display: flex; gap: 10px; align-items: flex-start;">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" style="flex-shrink: 0; margin-top: 1px;"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+              <div>Dan has <strong>48 hours</strong> to approve or reject. If they ghost, it auto-resolves.</div>
+            </div>
+
+            <div style="height: 14px;"></div>
+            <button class="btn full">Submit for review</button>
+          </div>
+        </div>
+      </div>
+      <div class="caption"><b>06 · Submit proof</b>Where claimants prove it</div>
+    </div>
+
+    <!-- 07 REVIEW QUEUE -->
+    <div class="device-cell" data-screen-label="Mobile · Review queue">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="statusbar"><span>9:41</span><span class="right">●●●●</span></div>
+          <div class="body">
+            <div class="topbar">
+              <div>
+                <h2>Your reviews</h2>
+                <div class="sub">3 pending · across 2 groups</div>
+              </div>
+              <div class="avatar v3">RM</div>
+            </div>
+
+            <div style="font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; margin: 8px 0;">💼 Office</div>
+
+            <div class="card" style="padding: 14px; margin-bottom: 10px;">
+              <div style="display: flex; gap: 12px;">
+                <div class="img-ph" style="width: 56px; height: 56px; flex-shrink: 0;">proof</div>
+                <div style="flex: 1;">
+                  <div style="display: flex; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
+                    <div style="font-weight: 700; font-size: 14px;">Send "all in favor" Slack vote</div>
+                    <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 15px;">$15</div>
+                  </div>
+                  <div style="font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px;"><div class="avatar sm v5">SM</div>sam · 3h ago</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card" style="padding: 14px; margin-bottom: 14px;">
+              <div style="display: flex; gap: 12px;">
+                <div class="img-ph" style="width: 56px; height: 56px; flex-shrink: 0;">proof</div>
+                <div style="flex: 1;">
+                  <div style="display: flex; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
+                    <div style="font-weight: 700; font-size: 14px;">Use the word "synergy" 10× in standup</div>
+                    <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 15px;">$20</div>
+                  </div>
+                  <div style="font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px;"><div class="avatar sm v4">DJ</div>dan · 6h ago</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; margin: 12px 0 8px;">🍻 Pub quiz</div>
+
+            <div class="card" style="padding: 14px;">
+              <div style="display: flex; gap: 12px;">
+                <div class="img-ph" style="width: 56px; height: 56px; flex-shrink: 0;">video</div>
+                <div style="flex: 1;">
+                  <div style="display: flex; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
+                    <div style="font-weight: 700; font-size: 14px;">Down a pint in under 8 seconds</div>
+                    <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 15px;">$40</div>
+                  </div>
+                  <div style="font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px;"><div class="avatar sm v2">NK</div>nora · 1d ago</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="tabbar">
+            <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 9 12 2l9 7v12H3z"/></svg>Groups</div>
+            <div class="tab active" style="position: relative;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+              Reviews
+              <div style="position: absolute; top: 8px; right: 14px; background: var(--danger); color: white; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 999px;">3</div>
+            </div>
+            <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Post</div>
+            <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>Ranks</div>
+            <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/></svg>Me</div>
+          </div>
+        </div>
+      </div>
+      <div class="caption"><b>07 · Review queue</b>Cross-group OP inbox</div>
+    </div>
+
+    <!-- 08 REVIEW DETAIL -->
+    <div class="device-cell" data-screen-label="Mobile · Review decision">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="statusbar"><span>9:41</span><span class="right">●●●●</span></div>
+          <div class="body">
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0 12px;">
+              <div style="width: 32px; height: 32px; border-radius: 10px; background: var(--bg-3); display: grid; place-items: center;">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </div>
+              <h2 style="font-family: 'Bricolage Grotesque'; font-size: 17px; margin: 0;">Decide</h2>
+              <div style="width: 32px;"></div>
+            </div>
+
+            <span class="state-badge s-pending" style="margin-bottom: 10px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg> Pending review</span>
+
+            <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 19px; line-height: 1.15; margin-bottom: 12px;">Send "all in favor" Slack vote about adding a ping-pong table.</div>
+
+            <div class="img-ph" style="aspect-ratio: 16/10; margin-bottom: 8px; font-size: 13px;">slack-screenshot.png</div>
+            <div style="display: flex; gap: 4px; justify-content: center; margin-bottom: 14px;">
+              <div style="width: 6px; height: 6px; border-radius: 999px; background: var(--ink);"></div>
+              <div style="width: 6px; height: 6px; border-radius: 999px; background: var(--line-2);"></div>
+            </div>
+
+            <div style="background: var(--bg-2); border-radius: 14px; padding: 12px 14px; margin-bottom: 14px;">
+              <div style="font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px;">Sam's note</div>
+              <div style="font-size: 13px; color: var(--ink); line-height: 1.5;">"Got 11 reacts in the channel and HR has questions. We winning?"</div>
+            </div>
+
+            <div style="background: var(--primary-soft); border-radius: 14px; padding: 12px 14px; margin-bottom: 16px; font-size: 12px; color: var(--primary-deep); line-height: 1.5;">
+              If you <strong>approve</strong>: Sam gains <strong>+15 pts</strong> &amp; you owe Sam <strong>$15</strong>.<br>
+              If you <strong>reject</strong>: Sam loses <strong>15 pts</strong>.
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <button class="btn danger">Reject</button>
+              <button class="btn success">Approve</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="caption"><b>08 · Review decision</b>OP's moment of truth</div>
+    </div>
+
+    <!-- 09 LEADERBOARD -->
+    <div class="device-cell" data-screen-label="Mobile · Leaderboard">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="statusbar"><span>9:41</span><span class="right">●●●●</span></div>
+          <div class="body" style="padding: 6px 0 70px;">
+            <div style="padding: 0 16px;">
+              <div class="topbar">
+                <div>
+                  <h2>Leaderboard</h2>
+                  <div class="sub">Office · all time</div>
+                </div>
+                <div class="avatar v3">RM</div>
+              </div>
+
+              <div style="display: flex; gap: 6px; margin-bottom: 14px;">
+                <span class="pill" style="background: var(--ink); color: white;">All time</span>
+                <span class="pill">Month</span>
+                <span class="pill">Week</span>
+              </div>
+            </div>
+
+            <!-- Podium -->
+            <div style="background: linear-gradient(180deg, var(--primary-soft) 0%, var(--bg) 100%); padding: 18px 16px 22px; margin: 0 0 12px;">
+              <div style="display: grid; grid-template-columns: 1fr 1.15fr 1fr; gap: 10px; align-items: end;">
+                <div style="text-align: center;">
+                  <div class="avatar lg v2" style="margin: 0 auto 6px;">NK</div>
+                  <div style="font-weight: 700; font-size: 13px;">nora</div>
+                  <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 18px; color: var(--ink-2);">220</div>
+                  <div style="background: oklch(0.88 0.01 80); color: oklch(0.35 0.01 75); font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 999px; display: inline-block; margin-top: 4px;">2nd</div>
+                </div>
+                <div style="text-align: center; padding-bottom: 8px;">
+                  <div class="avatar lg v3" style="margin: 0 auto 6px; width: 64px; height: 64px; font-size: 22px;">RM</div>
+                  <div style="font-weight: 700; font-size: 14px;">you</div>
+                  <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 22px; letter-spacing: -0.02em;">285</div>
+                  <div style="background: oklch(0.88 0.13 90); color: oklch(0.32 0.12 70); font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 999px; display: inline-block; margin-top: 4px;">🥇 1st</div>
+                </div>
+                <div style="text-align: center;">
+                  <div class="avatar lg v4" style="margin: 0 auto 6px;">DJ</div>
+                  <div style="font-weight: 700; font-size: 13px;">dan</div>
+                  <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 18px; color: var(--ink-2);">175</div>
+                  <div style="background: oklch(0.82 0.10 50); color: oklch(0.32 0.13 45); font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 999px; display: inline-block; margin-top: 4px;">3rd</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Rest -->
+            <div style="padding: 0 16px;">
+              <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line);">
+                <div class="rank">4</div>
+                <div class="avatar sm v5">SM</div>
+                <div style="flex: 1; font-weight: 600; font-size: 14px;">sam</div>
+                <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 15px;">110</div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line);">
+                <div class="rank">5</div>
+                <div class="avatar sm">JL</div>
+                <div style="flex: 1; font-weight: 600; font-size: 14px;">jess</div>
+                <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 15px;">95</div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line);">
+                <div class="rank">6</div>
+                <div class="avatar sm v2">EP</div>
+                <div style="flex: 1; font-weight: 600; font-size: 14px;">eli</div>
+                <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 15px; color: var(--danger);">−30</div>
+              </div>
+            </div>
+          </div>
+          <div class="tabbar">
+            <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 9 12 2l9 7v12H3z"/></svg>Groups</div>
+            <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>Reviews</div>
+            <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Post</div>
+            <div class="tab active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>Ranks</div>
+            <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/></svg>Me</div>
+          </div>
+        </div>
+      </div>
+      <div class="caption"><b>09 · Leaderboard</b>Top-three podium</div>
+    </div>
+
+    <!-- 10 PROFILE -->
+    <div class="device-cell" data-screen-label="Mobile · Profile">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="statusbar"><span>9:41</span><span class="right">●●●●</span></div>
+          <div class="body">
+            <div style="display: flex; align-items: center; gap: 12px; padding: 8px 0 16px;">
+              <div class="avatar lg v3" style="width: 64px; height: 64px; font-size: 22px;">RM</div>
+              <div style="flex: 1;">
+                <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 22px; line-height: 1;">Ria M.</div>
+                <div style="font-size: 13px; color: var(--muted); margin-top: 4px;">@ria · in 3 groups</div>
+              </div>
+              <div style="background: var(--bg-3); border-radius: 999px; width: 32px; height: 32px; display: grid; place-items: center;">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="2"/><circle cx="12" cy="5" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px;">
+              <div style="background: var(--primary-soft); border-radius: 14px; padding: 12px;">
+                <div style="font-size: 10px; color: var(--primary-deep); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em;">Points</div>
+                <div style="font-family: 'Bricolage Grotesque'; font-weight: 800; font-size: 22px; color: var(--primary-deep); letter-spacing: -0.02em;">285</div>
+              </div>
+              <div style="background: var(--success-soft); border-radius: 14px; padding: 12px;">
+                <div style="font-size: 10px; color: var(--success); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em;">Wins</div>
+                <div style="font-family: 'Bricolage Grotesque'; font-weight: 800; font-size: 22px; color: var(--success); letter-spacing: -0.02em;">14</div>
+              </div>
+              <div style="background: var(--danger-soft); border-radius: 14px; padding: 12px;">
+                <div style="font-size: 10px; color: var(--danger); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em;">Losses</div>
+                <div style="font-family: 'Bricolage Grotesque'; font-weight: 800; font-size: 22px; color: var(--danger); letter-spacing: -0.02em;">3</div>
+              </div>
+            </div>
+
+            <div style="font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px;">IOU ledger</div>
+            <div class="card" style="padding: 0; overflow: hidden; margin-bottom: 14px;">
+              <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line);">
+                <div class="avatar sm v2">NK</div>
+                <div style="flex: 1;">
+                  <div style="font-size: 13px; font-weight: 600;">Nora owes you</div>
+                  <div style="font-size: 11px; color: var(--muted);">1 bounty</div>
+                </div>
+                <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 16px; color: var(--success);">+$30</div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px;">
+                <div class="avatar sm v4">DJ</div>
+                <div style="flex: 1;">
+                  <div style="font-size: 13px; font-weight: 600;">You owe Dan</div>
+                  <div style="font-size: 11px; color: var(--muted);">2 bounties</div>
+                </div>
+                <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 16px; color: var(--danger);">−$45</div>
+              </div>
+            </div>
+
+            <div style="font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px;">Recent</div>
+            <div class="bounty-card" style="margin-bottom: 8px; padding: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                <div style="font-weight: 600; font-size: 13px; line-height: 1.3;">Called the CEO by first name in all-hands</div>
+                <span class="state-badge s-success"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7 9 18l-5-5"/></svg> +25</span>
+              </div>
+            </div>
+            <div class="bounty-card" style="margin-bottom: 0; padding: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                <div style="font-weight: 600; font-size: 13px; line-height: 1.3;">Drink a coffee with no hands</div>
+                <span class="state-badge s-failed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg> −10</span>
+              </div>
+            </div>
+          </div>
+          <div class="tabbar">
+            <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 9 12 2l9 7v12H3z"/></svg>Groups</div>
+            <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>Reviews</div>
+            <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Post</div>
+            <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>Ranks</div>
+            <div class="tab active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/></svg>Me</div>
+          </div>
+        </div>
+      </div>
+      <div class="caption"><b>10 · Profile</b>Stats + IOU ledger</div>
+    </div>
+
+  </div>
+
+  <!-- ───────── DESKTOP ───────── -->
+  <div class="gallery-head" style="margin-top: 100px;">
+    <div class="left">
+      <div class="tag">05.b · Desktop adaptations</div>
+      <h2>Three-pane on big screens</h2>
+      <p style="margin: 0; color: var(--ink-2);">Same components, denser layout. Left nav, central feed, right rail for leaderboard + activity.</p>
+    </div>
+  </div>
+
+  <!-- Desktop: Feed -->
+  <div data-screen-label="Desktop · Feed" style="display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 60px;">
+    <div class="browser">
+      <div class="chrome">
+        <div class="dots"><i style="background: oklch(0.78 0.18 25)"></i><i style="background: oklch(0.85 0.16 80)"></i><i style="background: oklch(0.78 0.16 145)"></i></div>
+        <div class="url"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> bounty.app/g/office</div>
+      </div>
+      <div class="desktop-page">
+        <div class="dt-grid">
+
+          <!-- left -->
+          <aside class="dt-side">
+            <div style="font-family: 'Bricolage Grotesque'; font-weight: 800; font-size: 22px; margin-bottom: 18px;">Bounty<span style="color: var(--primary);">.</span></div>
+            <h4>Groups</h4>
+            <div class="dt-nav-item active"><span style="font-size: 14px;">💼</span> Office</div>
+            <div class="dt-nav-item"><span style="font-size: 14px;">🍻</span> Pub quiz</div>
+            <div class="dt-nav-item"><span style="font-size: 14px;">🏔️</span> Ski trip</div>
+            <h4 style="margin-top: 18px;">Personal</h4>
+            <div class="dt-nav-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+              Reviews
+              <span style="margin-left: auto; background: var(--primary); color: white; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px;">3</span>
+            </div>
+            <div class="dt-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg> Inbox</div>
+            <div class="dt-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/></svg> Profile</div>
+          </aside>
+
+          <!-- center feed -->
+          <div>
+            <div style="display: flex; align-items: end; justify-content: space-between; margin-bottom: 18px;">
+              <div>
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+                  <span style="font-size: 22px;">💼</span>
+                  <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 28px; letter-spacing: -0.02em;">Office shenanigans</div>
+                </div>
+                <div style="font-size: 13px; color: var(--muted);">14 members · 7 active bounties · you're #1 🥇</div>
+              </div>
+              <button class="btn"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="white" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg> Post bounty</button>
+            </div>
+            <div style="display: flex; gap: 6px; margin-bottom: 18px;">
+              <span class="pill" style="background: var(--ink); color: white;">All · 7</span>
+              <span class="pill">Available · 4</span>
+              <span class="pill">In progress · 2</span>
+              <span class="pill">Pending · 1</span>
+              <span class="pill">Mine</span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              <div class="bounty-card" style="margin: 0;">
+                <div class="row1">
+                  <span class="state-badge s-available"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg> Available</span>
+                  <div class="price">$30<small> · 30 pts</small></div>
+                </div>
+                <div class="title-line">Hide in the 3rd floor bathroom for the full 9:30 standup.</div>
+                <div class="row2"><div class="avatar sm v2">NK</div><span>nora · 2h</span><span class="dot"></span><span>5d left</span></div>
+              </div>
+              <div class="bounty-card" style="margin: 0;">
+                <div class="row1">
+                  <span class="state-badge s-available"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg> Available</span>
+                  <div class="price">$10<small> · 10 pts</small></div>
+                </div>
+                <div class="title-line">Reply to every email in haiku form for one workday.</div>
+                <div class="row2"><div class="avatar sm v5">SM</div><span>sam · 4h</span><span class="dot"></span><span>2d left</span></div>
+              </div>
+              <div class="bounty-card" style="margin: 0;">
+                <div class="row1">
+                  <span class="state-badge s-claimed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg> In progress</span>
+                  <div class="price">$50<small> · 50 pts</small></div>
+                </div>
+                <div class="title-line">Wear a tie to every meeting this week. Photo proof daily.</div>
+                <div class="row2"><div class="avatar sm v4">DJ</div><span>dan · 1d</span><span class="dot"></span><span>claimed by you</span></div>
+              </div>
+              <div class="bounty-card" style="margin: 0;">
+                <div class="row1">
+                  <span class="state-badge s-pending"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg> Pending review</span>
+                  <div class="price">$15<small> · 15 pts</small></div>
+                </div>
+                <div class="title-line">Send an "all in favor" Slack vote about a ping-pong table.</div>
+                <div class="row2"><div class="avatar sm v5">SM</div><span>sam · 3h</span><span class="dot"></span><span>awaiting OP</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- right rail: mini leaderboard + activity -->
+          <aside style="display: flex; flex-direction: column; gap: 16px;">
+            <div class="dt-side">
+              <h4>Top this week</h4>
+              <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0;">
+                <div class="rank gold">1</div>
+                <div class="avatar sm v3">RM</div>
+                <div style="flex: 1; font-weight: 600; font-size: 13px;">you</div>
+                <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 14px;">285</div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0;">
+                <div class="rank silver">2</div>
+                <div class="avatar sm v2">NK</div>
+                <div style="flex: 1; font-weight: 600; font-size: 13px;">nora</div>
+                <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 14px;">220</div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0;">
+                <div class="rank bronze">3</div>
+                <div class="avatar sm v4">DJ</div>
+                <div style="flex: 1; font-weight: 600; font-size: 13px;">dan</div>
+                <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 14px;">175</div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0;">
+                <div class="rank">4</div>
+                <div class="avatar sm v5">SM</div>
+                <div style="flex: 1; font-weight: 600; font-size: 13px;">sam</div>
+                <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 14px;">110</div>
+              </div>
+              <a style="display: block; margin-top: 8px; color: var(--primary-deep); font-size: 12px; font-weight: 700;">View full leaderboard →</a>
+            </div>
+            <div class="dt-side">
+              <h4>Activity</h4>
+              <div style="font-size: 12px; color: var(--ink-2); margin-bottom: 10px; line-height: 1.5;"><strong>Nora</strong> approved your $25 bounty. <span style="color: var(--success); font-weight: 700;">+25 pts</span></div>
+              <div style="font-size: 12px; color: var(--ink-2); margin-bottom: 10px; line-height: 1.5;"><strong>Sam</strong> submitted proof for "Slack vote".</div>
+              <div style="font-size: 12px; color: var(--ink-2); line-height: 1.5;"><strong>Dan</strong> posted a new $50 bounty.</div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+    <div class="caption" style="font-family: 'JetBrains Mono', monospace; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em;"><b style="display:block; font-family: 'Plus Jakarta Sans'; color: var(--ink); font-size: 14px; text-transform: none; letter-spacing: 0;">Desktop · Bounty feed</b>Three-pane: nav, two-up cards, right rail</div>
+  </div>
+
+  <!-- Desktop: Review Queue -->
+  <div data-screen-label="Desktop · Review queue" style="display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 60px;">
+    <div class="browser">
+      <div class="chrome">
+        <div class="dots"><i style="background: oklch(0.78 0.18 25)"></i><i style="background: oklch(0.85 0.16 80)"></i><i style="background: oklch(0.78 0.16 145)"></i></div>
+        <div class="url"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> bounty.app/reviews</div>
+      </div>
+      <div class="desktop-page">
+        <div style="display: grid; grid-template-columns: 220px 1fr; gap: 24px;">
+          <aside class="dt-side">
+            <div style="font-family: 'Bricolage Grotesque'; font-weight: 800; font-size: 22px; margin-bottom: 18px;">Bounty<span style="color: var(--primary);">.</span></div>
+            <h4>Groups</h4>
+            <div class="dt-nav-item"><span style="font-size: 14px;">💼</span> Office</div>
+            <div class="dt-nav-item"><span style="font-size: 14px;">🍻</span> Pub quiz</div>
+            <div class="dt-nav-item"><span style="font-size: 14px;">🏔️</span> Ski trip</div>
+            <h4 style="margin-top: 18px;">Personal</h4>
+            <div class="dt-nav-item active">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+              Reviews
+              <span style="margin-left: auto; background: var(--primary); color: white; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px;">3</span>
+            </div>
+            <div class="dt-nav-item">Inbox</div>
+            <div class="dt-nav-item">Profile</div>
+          </aside>
+
+          <div>
+            <div style="display: flex; align-items: end; justify-content: space-between; margin-bottom: 22px;">
+              <div>
+                <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 32px; letter-spacing: -0.025em;">Your reviews</div>
+                <div style="font-size: 13px; color: var(--muted); margin-top: 4px;">3 pending across 2 groups · approve or reject so the points can flow</div>
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 24px; align-items: start;">
+              <!-- list -->
+              <div>
+                <div style="font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px;">💼 Office</div>
+                <div class="card" style="padding: 16px; margin-bottom: 10px; border: 2px solid var(--primary); box-shadow: 0 6px 20px rgba(249,115,22,.12);">
+                  <div style="display: flex; gap: 14px;">
+                    <div class="img-ph" style="width: 72px; height: 72px; flex-shrink: 0;">proof</div>
+                    <div style="flex: 1;">
+                      <div style="display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; align-items: start;">
+                        <div style="font-weight: 700; font-size: 15px;">Send "all in favor" Slack vote about ping-pong</div>
+                        <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 18px;">$15</div>
+                      </div>
+                      <div style="font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px;"><div class="avatar sm v5">SM</div>sam · 3h ago</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="card" style="padding: 16px; margin-bottom: 16px;">
+                  <div style="display: flex; gap: 14px;">
+                    <div class="img-ph" style="width: 72px; height: 72px; flex-shrink: 0;">proof</div>
+                    <div style="flex: 1;">
+                      <div style="display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; align-items: start;">
+                        <div style="font-weight: 700; font-size: 15px;">Use the word "synergy" 10× in standup</div>
+                        <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 18px;">$20</div>
+                      </div>
+                      <div style="font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px;"><div class="avatar sm v4">DJ</div>dan · 6h ago</div>
+                    </div>
+                  </div>
+                </div>
+                <div style="font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px;">🍻 Pub quiz</div>
+                <div class="card" style="padding: 16px;">
+                  <div style="display: flex; gap: 14px;">
+                    <div class="img-ph" style="width: 72px; height: 72px; flex-shrink: 0;">video</div>
+                    <div style="flex: 1;">
+                      <div style="display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; align-items: start;">
+                        <div style="font-weight: 700; font-size: 15px;">Down a pint in under 8 seconds</div>
+                        <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 18px;">$40</div>
+                      </div>
+                      <div style="font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px;"><div class="avatar sm v2">NK</div>nora · 1d ago</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- selected review -->
+              <div class="card" style="padding: 18px;">
+                <span class="state-badge s-pending" style="margin-bottom: 10px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg> Pending review</span>
+                <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 19px; line-height: 1.2; margin-bottom: 12px;">Send "all in favor" Slack vote about a ping-pong table.</div>
+                <div class="img-ph" style="aspect-ratio: 16/10; margin-bottom: 12px; font-size: 13px;">slack-screenshot.png</div>
+                <div style="background: var(--bg-2); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px;">
+                  <div style="font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px;">Sam's note</div>
+                  <div style="font-size: 13px; line-height: 1.5;">"Got 11 reacts in the channel and HR has questions. We winning?"</div>
+                </div>
+                <div style="background: var(--primary-soft); border-radius: 12px; padding: 10px 14px; margin-bottom: 16px; font-size: 12px; color: var(--primary-deep); line-height: 1.5;">
+                  Approve → Sam <strong>+15 pts</strong>, you owe Sam <strong>$15</strong>.<br>
+                  Reject → Sam <strong>−15 pts</strong>.
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                  <button class="btn danger">Reject</button>
+                  <button class="btn success">Approve</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="caption" style="font-family: 'JetBrains Mono', monospace; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em;"><b style="display:block; font-family: 'Plus Jakarta Sans'; color: var(--ink); font-size: 14px; text-transform: none; letter-spacing: 0;">Desktop · Review queue</b>Master-detail decision UI</div>
+  </div>
+
+  <!-- Desktop: Leaderboard -->
+  <div data-screen-label="Desktop · Leaderboard" style="display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 40px;">
+    <div class="browser">
+      <div class="chrome">
+        <div class="dots"><i style="background: oklch(0.78 0.18 25)"></i><i style="background: oklch(0.85 0.16 80)"></i><i style="background: oklch(0.78 0.16 145)"></i></div>
+        <div class="url"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> bounty.app/g/office/leaderboard</div>
+      </div>
+      <div class="desktop-page">
+        <div style="display: grid; grid-template-columns: 220px 1fr; gap: 24px;">
+          <aside class="dt-side">
+            <div style="font-family: 'Bricolage Grotesque'; font-weight: 800; font-size: 22px; margin-bottom: 18px;">Bounty<span style="color: var(--primary);">.</span></div>
+            <h4>Groups</h4>
+            <div class="dt-nav-item active"><span style="font-size: 14px;">💼</span> Office</div>
+            <div class="dt-nav-item"><span style="font-size: 14px;">🍻</span> Pub quiz</div>
+            <div class="dt-nav-item"><span style="font-size: 14px;">🏔️</span> Ski trip</div>
+            <h4 style="margin-top: 18px;">This group</h4>
+            <div class="dt-nav-item">Feed</div>
+            <div class="dt-nav-item active" style="background: var(--bg-3); color: var(--ink);">Leaderboard</div>
+            <div class="dt-nav-item">Settings</div>
+          </aside>
+
+          <div>
+            <div style="display: flex; align-items: end; justify-content: space-between; margin-bottom: 20px;">
+              <div>
+                <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 32px; letter-spacing: -0.025em;">Leaderboard</div>
+                <div style="font-size: 13px; color: var(--muted); margin-top: 4px;">Office shenanigans · 14 members</div>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <span class="pill" style="background: var(--ink); color: white;">All time</span>
+                <span class="pill">This month</span>
+                <span class="pill">This week</span>
+              </div>
+            </div>
+
+            <!-- Podium -->
+            <div style="background: linear-gradient(180deg, var(--primary-soft) 0%, transparent 100%); border-radius: var(--r-lg); padding: 28px 24px; margin-bottom: 22px;">
+              <div style="display: grid; grid-template-columns: 1fr 1.15fr 1fr; gap: 20px; align-items: end; max-width: 540px; margin: 0 auto;">
+                <div style="text-align: center;">
+                  <div class="avatar lg v2" style="margin: 0 auto 10px; width: 64px; height: 64px;">NK</div>
+                  <div style="font-weight: 700; font-size: 15px;">nora</div>
+                  <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 24px; color: var(--ink-2);">220</div>
+                  <div style="background: oklch(0.88 0.01 80); color: oklch(0.35 0.01 75); font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 999px; display: inline-block; margin-top: 6px;">2nd</div>
+                </div>
+                <div style="text-align: center; padding-bottom: 8px;">
+                  <div class="avatar lg v3" style="margin: 0 auto 10px; width: 80px; height: 80px; font-size: 26px;">RM</div>
+                  <div style="font-weight: 700; font-size: 16px;">you (ria)</div>
+                  <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 32px; letter-spacing: -0.02em;">285</div>
+                  <div style="background: oklch(0.88 0.13 90); color: oklch(0.32 0.12 70); font-size: 11px; font-weight: 800; padding: 3px 12px; border-radius: 999px; display: inline-block; margin-top: 6px;">🥇 1st</div>
+                </div>
+                <div style="text-align: center;">
+                  <div class="avatar lg v4" style="margin: 0 auto 10px; width: 64px; height: 64px;">DJ</div>
+                  <div style="font-weight: 700; font-size: 15px;">dan</div>
+                  <div style="font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 24px; color: var(--ink-2);">175</div>
+                  <div style="background: oklch(0.82 0.10 50); color: oklch(0.32 0.13 45); font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 999px; display: inline-block; margin-top: 6px;">3rd</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Table -->
+            <div class="card" style="padding: 0; overflow: hidden;">
+              <div style="display: grid; grid-template-columns: 60px 1fr 80px 80px 100px 100px; padding: 14px 20px; background: var(--bg-2); font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; border-bottom: 1px solid var(--line);">
+                <div>Rank</div><div>Member</div><div style="text-align: right;">Wins</div><div style="text-align: right;">Losses</div><div style="text-align: right;">Net IOU</div><div style="text-align: right;">Points</div>
+              </div>
+              <div style="display: grid; grid-template-columns: 60px 1fr 80px 80px 100px 100px; padding: 14px 20px; align-items: center; border-bottom: 1px solid var(--line);">
+                <div class="rank">4</div>
+                <div style="display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px;"><div class="avatar sm v5">SM</div> sam</div>
+                <div style="text-align: right; font-family: 'Bricolage Grotesque'; font-weight: 600; color: var(--success);">9</div>
+                <div style="text-align: right; font-family: 'Bricolage Grotesque'; font-weight: 600; color: var(--danger);">4</div>
+                <div style="text-align: right; font-family: 'Bricolage Grotesque'; font-weight: 600;">+$20</div>
+                <div style="text-align: right; font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 16px;">110</div>
+              </div>
+              <div style="display: grid; grid-template-columns: 60px 1fr 80px 80px 100px 100px; padding: 14px 20px; align-items: center; border-bottom: 1px solid var(--line);">
+                <div class="rank">5</div>
+                <div style="display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px;"><div class="avatar sm">JL</div> jess</div>
+                <div style="text-align: right; font-family: 'Bricolage Grotesque'; font-weight: 600; color: var(--success);">7</div>
+                <div style="text-align: right; font-family: 'Bricolage Grotesque'; font-weight: 600; color: var(--danger);">3</div>
+                <div style="text-align: right; font-family: 'Bricolage Grotesque'; font-weight: 600;">−$10</div>
+                <div style="text-align: right; font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 16px;">95</div>
+              </div>
+              <div style="display: grid; grid-template-columns: 60px 1fr 80px 80px 100px 100px; padding: 14px 20px; align-items: center; border-bottom: 1px solid var(--line);">
+                <div class="rank">6</div>
+                <div style="display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px;"><div class="avatar sm v2">EP</div> eli</div>
+                <div style="text-align: right; font-family: 'Bricolage Grotesque'; font-weight: 600; color: var(--success);">2</div>
+                <div style="text-align: right; font-family: 'Bricolage Grotesque'; font-weight: 600; color: var(--danger);">5</div>
+                <div style="text-align: right; font-family: 'Bricolage Grotesque'; font-weight: 600;">−$30</div>
+                <div style="text-align: right; font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 16px; color: var(--danger);">−30</div>
+              </div>
+              <div style="display: grid; grid-template-columns: 60px 1fr 80px 80px 100px 100px; padding: 14px 20px; align-items: center;">
+                <div class="rank">7</div>
+                <div style="display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px;"><div class="avatar sm v4">TG</div> theo</div>
+                <div style="text-align: right; font-family: 'Bricolage Grotesque'; font-weight: 600; color: var(--success);">1</div>
+                <div style="text-align: right; font-family: 'Bricolage Grotesque'; font-weight: 600; color: var(--danger);">3</div>
+                <div style="text-align: right; font-family: 'Bricolage Grotesque'; font-weight: 600;">−$15</div>
+                <div style="text-align: right; font-family: 'Bricolage Grotesque'; font-weight: 700; font-size: 16px; color: var(--danger);">−45</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="caption" style="font-family: 'JetBrains Mono', monospace; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em;"><b style="display:block; font-family: 'Plus Jakarta Sans'; color: var(--ink); font-size: 14px; text-transform: none; letter-spacing: 0;">Desktop · Leaderboard</b>Podium on top, full table below</div>
+  </div>
+
+  <footer class="docfoot">
+    <span>Bounty · design spec &amp; mockups · v0.1</span>
+    <span>End of document</span>
+  </footer>
+
+</div>
+</body>
+</html>

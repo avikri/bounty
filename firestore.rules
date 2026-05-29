@@ -1,0 +1,95 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ── helpers ─────────────────────────────────────────────────── */
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isMember(gid) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/groups/$(gid)/members/$(request.auth.uid));
+    }
+
+    function isOwner(gid) {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/groups/$(gid)).data.ownerId == request.auth.uid;
+    }
+
+    function isAdmin(gid) {
+      return isSignedIn() && isMember(gid) &&
+        get(/databases/$(database)/documents/groups/$(gid)/members/$(request.auth.uid)).data.role in ['owner', 'admin'];
+    }
+
+    /* ── users ───────────────────────────────────────────────────── */
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSelf(userId);
+      allow delete: if false;
+    }
+
+    /* ── groups ──────────────────────────────────────────────────── */
+    match /groups/{gid} {
+      allow read:   if isMember(gid);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isOwner(gid) || isAdmin(gid);
+      allow delete: if isOwner(gid);
+
+      /* members subcollection */
+      match /members/{userId} {
+        allow read: if isMember(gid);
+        // Members are created via invite-redemption Cloud Function (preferred);
+        // direct self-create is allowed for a v1 client-only flow.
+        allow create: if isSelf(userId) && request.resource.data.role == 'member';
+        allow update, delete: if isOwner(gid) || isSelf(userId);
+      }
+
+      /* bounties */
+      match /bounties/{bid} {
+        allow read:   if isMember(gid);
+        allow create: if isMember(gid)
+                       && request.resource.data.posterId == request.auth.uid
+                       && request.resource.data.state == 'available';
+        // State transitions go through Cloud Functions only.
+        allow update: if false;
+        allow delete: if resource.data.posterId == request.auth.uid
+                       && resource.data.state == 'available';
+
+        /* activity timeline — append-only via CF */
+        match /activity/{eventId} {
+          allow read: if isMember(gid);
+          allow write: if false;
+        }
+      }
+
+      /* leaderboard summary — CF only */
+      match /leaderboard/{docId} {
+        allow read:  if isMember(gid);
+        allow write: if false;
+      }
+    }
+
+    /* ── IOUs ────────────────────────────────────────────────────── */
+    match /ious/{iouId} {
+      allow read: if isSignedIn()
+                   && (resource.data.debtorId == request.auth.uid
+                       || resource.data.creditorId == request.auth.uid);
+      // Creation/settlement happen via Cloud Functions.
+      allow write: if false;
+    }
+
+    /* ── notifications ───────────────────────────────────────────── */
+    match /notifications/{userId}/inbox/{notifId} {
+      allow read, update, delete: if isSelf(userId);
+      // Creation by Cloud Functions only.
+      allow create: if false;
+    }
+  }
+}

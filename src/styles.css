@@ -1,0 +1,179 @@
+:root {
+  --bg:        oklch(0.985 0.010 80);
+  --bg-2:      oklch(0.965 0.014 78);
+  --bg-3:      oklch(0.945 0.018 76);
+  --card:      oklch(1.00 0 0);
+  --ink:       oklch(0.22 0.020 60);
+  --ink-2:     oklch(0.38 0.020 60);
+  --muted:     oklch(0.56 0.018 70);
+  --line:      oklch(0.90 0.012 75);
+  --line-2:    oklch(0.84 0.015 75);
+
+  --primary:        oklch(0.72 0.175 50);
+  --primary-deep:   oklch(0.58 0.180 45);
+  --primary-soft:   oklch(0.94 0.045 65);
+  --success:        oklch(0.68 0.155 150);
+  --success-soft:   oklch(0.94 0.045 150);
+  --danger:         oklch(0.62 0.205 28);
+  --danger-soft:    oklch(0.94 0.045 28);
+  --info:           oklch(0.65 0.140 240);
+  --info-soft:      oklch(0.94 0.040 240);
+  --warn:           oklch(0.78 0.165 88);
+  --warn-soft:      oklch(0.95 0.060 88);
+  --purple:         oklch(0.62 0.170 300);
+  --purple-soft:    oklch(0.95 0.040 300);
+
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+  --r-2xl: 36px;
+
+  --shadow-1: 0 1px 0 rgba(40,30,15,.04), 0 2px 8px rgba(40,30,15,.04);
+  --shadow-2: 0 1px 0 rgba(40,30,15,.05), 0 8px 24px rgba(40,30,15,.06);
+  --shadow-3: 0 24px 60px rgba(40,30,15,.10);
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+}
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3 {
+  font-family: 'Bricolage Grotesque', serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0;
+  color: var(--ink);
+}
+p { margin: 0 0 12px; color: var(--ink-2); text-wrap: pretty; }
+
+code, kbd, .mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.86em;
+}
+
+a { color: inherit; text-decoration: none; }
+button { font-family: inherit; }
+
+/* ─── Buttons ─── */
+.btn {
+  border: 0;
+  background: var(--primary);
+  color: white;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  cursor: pointer;
+  box-shadow: 0 1px 0 oklch(0.50 0.180 45), 0 4px 10px rgba(249,115,22,.25);
+  transition: transform .08s ease, box-shadow .08s ease, background .2s ease;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+.btn.ghost { background: var(--bg-3); color: var(--ink); box-shadow: none; }
+.btn.outline { background: transparent; color: var(--ink); border: 1.5px solid var(--line-2); box-shadow: none; }
+.btn.success { background: var(--success); box-shadow: 0 1px 0 oklch(0.50 0.155 150), 0 4px 10px rgba(0,150,80,.18); }
+.btn.danger  { background: var(--danger);  box-shadow: 0 1px 0 oklch(0.45 0.205 28), 0 4px 10px rgba(220,38,38,.18); }
+.btn.full { width: 100%; }
+.btn.dark { background: #111; box-shadow: 0 1px 0 #000, 0 4px 10px rgba(0,0,0,.18); }
+
+/* ─── Forms ─── */
+.input {
+  background: var(--card);
+  border: 1.5px solid var(--line-2);
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  width: 100%;
+}
+.input:focus { outline: none; border-color: var(--primary); }
+.label { font-size: 12px; font-weight: 700; color: var(--ink); margin-bottom: 6px; display: block; }
+
+/* ─── Pills ─── */
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--bg-3);
+  color: var(--ink-2);
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+.pill.active { background: var(--ink); color: white; }
+
+/* ─── Cards ─── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 22px;
+  box-shadow: var(--shadow-1);
+}
+
+/* ─── State badges (per design) ─── */
+.state-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 999px;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.state-badge svg { width: 12px; height: 12px; }
+.s-available { background: var(--info-soft); color: var(--info); }
+.s-claimed   { background: var(--warn-soft); color: oklch(0.50 0.140 75); }
+.s-pending   { background: var(--purple-soft); color: var(--purple); }
+.s-success   { background: var(--success-soft); color: var(--success); }
+.s-failed    { background: var(--danger-soft); color: var(--danger); }
+
+/* ─── Image placeholder ─── */
+.img-ph {
+  background: repeating-linear-gradient(135deg, var(--bg-2) 0 8px, var(--bg-3) 8px 16px);
+  border-radius: var(--r-md);
+  border: 1px dashed var(--line-2);
+  display: grid; place-items: center;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* ─── Leaderboard rank chips ─── */
+.rank {
+  width: 28px; height: 28px; border-radius: 999px;
+  background: var(--bg-3);
+  display: grid; place-items: center;
+  font-weight: 800; font-size: 12px;
+  color: var(--ink-2);
+}
+.rank.gold   { background: oklch(0.88 0.13 90); color: oklch(0.32 0.12 70); }
+.rank.silver { background: oklch(0.88 0.01 80); color: oklch(0.35 0.01 75); }
+.rank.bronze { background: oklch(0.82 0.10 50); color: oklch(0.32 0.13 45); }
+
+/* ─── Tone helpers used across feature pages ─── */
+.kicker {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.mono-sm { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+/* prevent body scroll on mobile when overlays open */
+body.no-scroll { overflow: hidden; }
