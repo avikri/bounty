@@ -16,11 +16,17 @@ import {setGlobalOptions} from "firebase-functions";
 import {HttpsError, onCall, CallableRequest} from "firebase-functions/v2/https";
 import {onSchedule} from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
+// Pull Timestamp/FieldValue from the modular entry point rather than off
+// `admin.firestore.*`. The Functions emulator wraps `admin.firestore()` to
+// auto-connect to the local emulator, and that wrapper drops the static
+// members (Timestamp, FieldValue) — so `admin.firestore.Timestamp` is
+// undefined under the emulator. The modular named exports work in both the
+// emulator and production.
+import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 
 admin.initializeApp();
 const db = admin.firestore();
-const Timestamp = admin.firestore.Timestamp;
 
 setGlobalOptions({maxInstances: 10, region: "australia-southeast1"});
 
@@ -43,9 +49,9 @@ interface BountyData {
   posterId: string;
   claimantId?: string | null;
   proof?: { urls: string[]; note: string };
-  expiresAt: admin.firestore.Timestamp;
-  createdAt: admin.firestore.Timestamp;
-  resolvedAt?: admin.firestore.Timestamp;
+  expiresAt: Timestamp;
+  createdAt: Timestamp;
+  resolvedAt?: Timestamp;
   rejectionReason?: string;
 }
 
@@ -640,7 +646,7 @@ export const createGroup = onCall(async (req) => {
   });
   batch.set(leaderboardRef, {entries: [ownerEntry], updatedAt: now});
   batch.update(userRef, {
-    groupIds: admin.firestore.FieldValue.arrayUnion(groupRef.id),
+    groupIds: FieldValue.arrayUnion(groupRef.id),
   });
   await batch.commit();
 
@@ -712,11 +718,11 @@ export const joinGroup = onCall(async (req) => {
       joinedAt: now,
     });
     tx.update(groupRef, {
-      memberCount: admin.firestore.FieldValue.increment(1),
+      memberCount: FieldValue.increment(1),
     });
     tx.set(leaderboardRef, {entries, updatedAt: now}, {merge: true});
     tx.set(userRef, {
-      groupIds: admin.firestore.FieldValue.arrayUnion(groupId),
+      groupIds: FieldValue.arrayUnion(groupId),
     }, {merge: true});
   });
 

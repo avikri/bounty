@@ -5,7 +5,12 @@
     "ng": "ng",
     "start": "ng serve --open",
     "build": "ng build",
-    "watch": "ng build --watch --configuration development"
+    "watch": "ng build --watch --configuration development",
+    "build:functions": "npm --prefix functions run build",
+    "emulators": "firebase emulators:start --only auth,firestore,functions,storage",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "firebase emulators:exec --only auth,firestore,functions,storage \"npx vitest run tests/integration\"",
+    "test": "npm run build:functions && npm run test:unit && npm run test:integration"
   },
   "private": true,
   "dependencies": {
@@ -27,6 +32,7 @@
     "@angular-devkit/build-angular": "^18.2.0",
     "@angular/cli": "^18.2.0",
     "@angular/compiler-cli": "^18.2.0",
-    "typescript": "~5.5.0"
+    "typescript": "~5.5.0",
+    "vitest": "^2.1.9"
   }
 }

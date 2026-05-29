@@ -51,10 +51,16 @@ const firebase_functions_1 = require("firebase-functions");
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = __importStar(require("firebase-admin"));
+// Pull Timestamp/FieldValue from the modular entry point rather than off
+// `admin.firestore.*`. The Functions emulator wraps `admin.firestore()` to
+// auto-connect to the local emulator, and that wrapper drops the static
+// members (Timestamp, FieldValue) — so `admin.firestore.Timestamp` is
+// undefined under the emulator. The modular named exports work in both the
+// emulator and production.
+const firestore_1 = require("firebase-admin/firestore");
 const logger = __importStar(require("firebase-functions/logger"));
 admin.initializeApp();
 const db = admin.firestore();
-const Timestamp = admin.firestore.Timestamp;
 (0, firebase_functions_1.setGlobalOptions)({ maxInstances: 10, region: "australia-southeast1" });
 const MAX_LEADERBOARD_ENTRIES = 100;
 const MAX_PROOF_NOTE_CHARS = 500;
@@ -89,7 +95,7 @@ function upsertLeaderboardEntry(current, entry) {
 }
 async function writeInbox(userId, payload) {
     try {
-        await db.collection(`notifications/${userId}/inbox`).add(Object.assign(Object.assign({}, payload), { createdAt: Timestamp.now(), read: false }));
+        await db.collection(`notifications/${userId}/inbox`).add(Object.assign(Object.assign({}, payload), { createdAt: firestore_1.Timestamp.now(), read: false }));
     }
     catch (e) {
         logger.warn("inbox write failed", { userId, error: String(e) });
@@ -129,7 +135,7 @@ exports.claimBounty = (0, https_1.onCall)(async (req) => {
     const activityRef = db
         .collection(`groups/${groupId}/bounties/${bountyId}/activity`)
         .doc();
-    const now = Timestamp.now();
+    const now = firestore_1.Timestamp.now();
     const result = await db.runTransaction(async (tx) => {
         const bountySnap = await tx.get(bountyRef);
         if (!bountySnap.exists) {
@@ -181,7 +187,7 @@ exports.submitProof = (0, https_1.onCall)(async (req) => {
     const activityRef = db
         .collection(`groups/${groupId}/bounties/${bountyId}/activity`)
         .doc();
-    const now = Timestamp.now();
+    const now = firestore_1.Timestamp.now();
     const result = await db.runTransaction(async (tx) => {
         const bountySnap = await tx.get(bountyRef);
         if (!bountySnap.exists) {
@@ -234,7 +240,7 @@ exports.approveBounty = (0, https_1.onCall)(async (req) => {
         .collection(`groups/${groupId}/bounties/${bountyId}/activity`)
         .doc();
     const iouRef = db.collection("ious").doc();
-    const now = Timestamp.now();
+    const now = firestore_1.Timestamp.now();
     const result = await db.runTransaction(async (tx) => {
         var _a, _b, _c, _d, _e, _f, _g, _h, _j;
         const bountySnap = await tx.get(bountyRef);
@@ -340,7 +346,7 @@ exports.rejectBounty = (0, https_1.onCall)(async (req) => {
     const activityRef = db
         .collection(`groups/${groupId}/bounties/${bountyId}/activity`)
         .doc();
-    const now = Timestamp.now();
+    const now = firestore_1.Timestamp.now();
     const result = await db.runTransaction(async (tx) => {
         var _a, _b, _c, _d, _e, _f, _g, _h, _j;
         const bountySnap = await tx.get(bountyRef);
@@ -424,7 +430,7 @@ exports.rejectBounty = (0, https_1.onCall)(async (req) => {
 });
 /* ── onBountyExpiry (nightly sweep) ───────────────────────────────── */
 exports.onBountyExpiry = (0, scheduler_1.onSchedule)("every day 03:00", async () => {
-    const now = Timestamp.now();
+    const now = firestore_1.Timestamp.now();
     // Spec: expire anything still 'available' OR 'claimed' past expiresAt.
     // Firestore doesn't allow `in` + range on a non-equality field cheaply,
     // so we run two queries and merge.
@@ -499,7 +505,7 @@ exports.createGroup = (0, https_1.onCall)(async (req) => {
     const groupRef = db.collection("groups").doc();
     const memberRef = groupRef.collection("members").doc(uid);
     const leaderboardRef = groupRef.collection("leaderboard").doc("summary");
-    const now = Timestamp.now();
+    const now = firestore_1.Timestamp.now();
     const ownerEntry = {
         userId: uid,
         name: (_b = user.displayName) !== null && _b !== void 0 ? _b : "",
@@ -529,7 +535,7 @@ exports.createGroup = (0, https_1.onCall)(async (req) => {
     });
     batch.set(leaderboardRef, { entries: [ownerEntry], updatedAt: now });
     batch.update(userRef, {
-        groupIds: admin.firestore.FieldValue.arrayUnion(groupRef.id),
+        groupIds: firestore_1.FieldValue.arrayUnion(groupRef.id),
     });
     await batch.commit();
     return { ok: true, groupId: groupRef.id, inviteCode };
@@ -566,7 +572,7 @@ exports.joinGroup = (0, https_1.onCall)(async (req) => {
     const user = userSnap.data();
     const leaderboardRef = db.doc(`groups/${groupId}/leaderboard/summary`);
     const groupRef = db.doc(`groups/${groupId}`);
-    const now = Timestamp.now();
+    const now = firestore_1.Timestamp.now();
     await db.runTransaction(async (tx) => {
         var _a, _b, _c, _d, _e, _f;
         const lbSnap = await tx.get(leaderboardRef);
@@ -591,11 +597,11 @@ exports.joinGroup = (0, https_1.onCall)(async (req) => {
             joinedAt: now,
         });
         tx.update(groupRef, {
-            memberCount: admin.firestore.FieldValue.increment(1),
+            memberCount: firestore_1.FieldValue.increment(1),
         });
         tx.set(leaderboardRef, { entries, updatedAt: now }, { merge: true });
         tx.set(userRef, {
-            groupIds: admin.firestore.FieldValue.arrayUnion(groupId),
+            groupIds: firestore_1.FieldValue.arrayUnion(groupId),
         }, { merge: true });
     });
     return { ok: true, groupId };
@@ -630,7 +636,7 @@ exports.markIouPaid = (0, https_1.onCall)(async (req) => {
     const data = ((_a = req.data) !== null && _a !== void 0 ? _a : {});
     const iouId = requireString(data.iouId, "iouId");
     const iouRef = db.doc(`ious/${iouId}`);
-    const now = Timestamp.now();
+    const now = firestore_1.Timestamp.now();
     const result = await db.runTransaction(async (tx) => {
         const snap = await tx.get(iouRef);
         if (!snap.exists) {
