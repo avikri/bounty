@@ -7,6 +7,7 @@ import { AvatarComponent } from '../../shared/avatar.component';
 import { StateBadgeComponent } from '../../shared/state-badge.component';
 import { RelativePipe } from '../../shared/countdown.pipe';
 import { IconComponent } from '../../shared/icon.component';
+import { ProofGalleryComponent } from '../../shared/proof-gallery.component';
 import { ToastService } from '../../shared/toast.service';
 import { Bounty, Group } from '../../core/models';
 
@@ -14,7 +15,7 @@ import { Bounty, Group } from '../../core/models';
   selector: 'app-review-queue',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AvatarComponent, StateBadgeComponent, RelativePipe, IconComponent, FormsModule],
+  imports: [AvatarComponent, StateBadgeComponent, RelativePipe, IconComponent, FormsModule, ProofGalleryComponent],
   template: `
     <div class="wrap">
       <div class="topbar">
@@ -38,7 +39,13 @@ import { Bounty, Group } from '../../core/models';
                 [class.selected]="selectedId() === b.id"
                 (click)="select(b.id)"
               >
-                <div class="img-ph thumb">proof</div>
+                @if (firstImage(b); as src) {
+                  <img class="thumb img" [src]="src" alt="proof" />
+                } @else if (b.proof?.urls?.length) {
+                  <div class="img-ph thumb">video</div>
+                } @else {
+                  <div class="img-ph thumb">proof</div>
+                }
                 <div class="meat">
                   <div class="title-row">
                     <div class="title">{{ b.title }}</div>
@@ -60,7 +67,12 @@ import { Bounty, Group } from '../../core/models';
           <aside class="detail-panel">
             <app-state-badge [bountyState]="b.state" />
             <h3 class="d-title">{{ b.title }}</h3>
-            <div class="img-ph big">{{ b.proof?.urls?.[0] || 'proof.png' }}</div>
+            @if (b.proof?.urls?.length) {
+              <app-proof-gallery [urls]="b.proof!.urls" />
+              <div style="height: 12px;"></div>
+            } @else {
+              <div class="img-ph big">no media submitted</div>
+            }
             @if (b.proof?.note) {
               <div class="note-box">
                 <div class="kicker">{{ claimantOf(b)?.handle }}'s note</div>
@@ -137,6 +149,7 @@ import { Bounty, Group } from '../../core/models';
     }
 
     .thumb { width: 56px; height: 56px; flex-shrink: 0; }
+    .thumb.img { border-radius: var(--r-md); object-fit: cover; border: 1px solid var(--line); }
     .meat { flex: 1; min-width: 0; }
     .title-row {
       display: flex; justify-content: space-between; gap: 8px;
@@ -266,6 +279,11 @@ export class ReviewQueuePage {
 
   claimantOf(b: Bounty) {
     return b.claimantId ? this.data.userById(b.claimantId) : undefined;
+  }
+
+  /** First image URL in the proof, if any — used for the row thumbnail. */
+  firstImage(b: Bounty): string | undefined {
+    return b.proof?.urls?.find((u) => /\.(png|jpe?g|gif|webp|avif|heic)(\?|#|$)/i.test(u));
   }
 
   shortName(name: string): string { return name.split(' ')[0] ?? name; }

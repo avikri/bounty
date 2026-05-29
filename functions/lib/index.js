@@ -55,7 +55,7 @@ const logger = __importStar(require("firebase-functions/logger"));
 admin.initializeApp();
 const db = admin.firestore();
 const Timestamp = admin.firestore.Timestamp;
-(0, firebase_functions_1.setGlobalOptions)({ maxInstances: 10, region: "us-central1" });
+(0, firebase_functions_1.setGlobalOptions)({ maxInstances: 10, region: "australia-southeast1" });
 const MAX_LEADERBOARD_ENTRIES = 100;
 const MAX_PROOF_NOTE_CHARS = 500;
 const MAX_REJECTION_REASON_CHARS = 500;
@@ -95,6 +95,28 @@ async function writeInbox(userId, payload) {
         logger.warn("inbox write failed", { userId, error: String(e) });
     }
 }
+/** Best-effort lookup of a member's cached display name within a group. */
+async function memberName(groupId, uid) {
+    var _a;
+    try {
+        const snap = await db.doc(`groups/${groupId}/members/${uid}`).get();
+        return ((_a = snap.data()) === null || _a === void 0 ? void 0 : _a.displayName) || "Someone";
+    }
+    catch (_b) {
+        return "Someone";
+    }
+}
+/** Best-effort lookup of a top-level user's display name. */
+async function userName(uid) {
+    var _a;
+    try {
+        const snap = await db.doc(`users/${uid}`).get();
+        return ((_a = snap.data()) === null || _a === void 0 ? void 0 : _a.displayName) || "Someone";
+    }
+    catch (_b) {
+        return "Someone";
+    }
+}
 /* ── claimBounty ──────────────────────────────────────────────────── */
 exports.claimBounty = (0, https_1.onCall)(async (req) => {
     var _a;
@@ -125,14 +147,17 @@ exports.claimBounty = (0, https_1.onCall)(async (req) => {
         }
         tx.update(bountyRef, { state: "claimed", claimantId: uid });
         tx.set(activityRef, { kind: "claimed", actorId: uid, at: now });
-        return { posterId: bounty.posterId };
+        return { posterId: bounty.posterId, bountyTitle: bounty.title };
     });
+    const actorName = await memberName(groupId, uid);
     await writeInbox(result.posterId, {
         kind: "bounty_claimed",
         groupId,
         bountyId,
         actorId: uid,
-        text: "Someone claimed your bounty.",
+        actorName,
+        title: "Bounty claimed",
+        body: `${actorName} claimed "${result.bountyTitle}".`,
     });
     return { ok: true };
 });
@@ -179,14 +204,19 @@ exports.submitProof = (0, https_1.onCall)(async (req) => {
             at: now,
             note: note || null,
         });
-        return { posterId: bounty.posterId };
+        return { posterId: bounty.posterId, bountyTitle: bounty.title };
     });
+    // The reviewer for a bounty is its original poster, so notifying the OP
+    // covers "notify reviewers when a bounty enters pending_review".
+    const actorName = await memberName(groupId, uid);
     await writeInbox(result.posterId, {
         kind: "proof_submitted",
         groupId,
         bountyId,
         actorId: uid,
-        text: "Proof submitted on your bounty — your call.",
+        actorName,
+        title: "Proof submitted",
+        body: `${actorName} submitted proof on "${result.bountyTitle}" — your call.`,
     });
     return { ok: true };
 });
@@ -268,16 +298,20 @@ exports.approveBounty = (0, https_1.onCall)(async (req) => {
             claimantId,
             posterId: bounty.posterId,
             price: bounty.price,
+            bountyTitle: bounty.title,
         };
     });
+    const reviewerName = await memberName(groupId, uid);
     await Promise.all([
         writeInbox(result.claimantId, {
             kind: "bounty_approved",
             groupId,
             bountyId,
             actorId: uid,
+            actorName: reviewerName,
             amount: result.price,
-            text: `Your claim was approved. +${result.price} pts.`,
+            title: "Claim approved",
+            body: `Your claim on "${result.bountyTitle}" was approved. +${result.price} pts.`,
         }),
         writeInbox(result.posterId, {
             kind: "bounty_resolved",
@@ -285,7 +319,8 @@ exports.approveBounty = (0, https_1.onCall)(async (req) => {
             bountyId,
             actorId: uid,
             amount: result.price,
-            text: `You approved a $${result.price} bounty.`,
+            title: "Bounty resolved",
+            body: `You approved "${result.bountyTitle}". You now owe $${result.price}.`,
         }),
     ]);
     return { ok: true };
@@ -369,16 +404,21 @@ exports.rejectBounty = (0, https_1.onCall)(async (req) => {
             claimantId,
             posterId: bounty.posterId,
             price: bounty.price,
+            bountyTitle: bounty.title,
         };
     });
+    const reviewerName = await memberName(groupId, uid);
     await writeInbox(result.claimantId, {
         kind: "bounty_rejected",
         groupId,
         bountyId,
         actorId: uid,
+        actorName: reviewerName,
         amount: result.price,
         reason,
-        text: `Your claim was rejected. -${result.price} pts.`,
+        title: "Claim rejected",
+        body: `Your claim on "${result.bountyTitle}" was rejected.` +
+            (reason ? ` Reason: ${reason}` : "") + ` -${result.price} pts.`,
     });
     return { ok: true };
 });
@@ -607,17 +647,23 @@ exports.markIouPaid = (0, https_1.onCall)(async (req) => {
         }
         const myMark = isDebtor ? "debtor_marked" : "creditor_marked";
         const otherMark = isDebtor ? "creditor_marked" : "debtor_marked";
+        const base = {
+            debtorId: iou.debtorId,
+            creditorId: iou.creditorId,
+            isDebtor,
+            otherParty: isDebtor ? iou.creditorId : iou.debtorId,
+        };
         if (iou.status === "open") {
             tx.update(iouRef, { status: myMark });
-            return { settled: false, debtorId: iou.debtorId, creditorId: iou.creditorId };
+            return Object.assign(Object.assign({}, base), { settled: false, marked: true });
         }
         if (iou.status === myMark) {
             // already marked by me — no-op
-            return { settled: false, debtorId: iou.debtorId, creditorId: iou.creditorId };
+            return Object.assign(Object.assign({}, base), { settled: false, marked: false });
         }
         if (iou.status === otherMark) {
             tx.update(iouRef, { status: "settled", settledAt: now });
-            return { settled: true, debtorId: iou.debtorId, creditorId: iou.creditorId };
+            return Object.assign(Object.assign({}, base), { settled: true, marked: false });
         }
         throw new https_1.HttpsError("internal", "Unknown IOU state.");
     });
@@ -626,14 +672,28 @@ exports.markIouPaid = (0, https_1.onCall)(async (req) => {
             writeInbox(result.debtorId, {
                 kind: "iou_settled",
                 iouId,
-                text: "An IOU has been settled.",
+                title: "IOU settled",
+                body: "An IOU between you two is now settled.",
             }),
             writeInbox(result.creditorId, {
                 kind: "iou_settled",
                 iouId,
-                text: "An IOU has been settled.",
+                title: "IOU settled",
+                body: "An IOU between you two is now settled.",
             }),
         ]);
+    }
+    else if (result.marked) {
+        const actorName = await userName(uid);
+        const verb = result.isDebtor ? "paid" : "received";
+        await writeInbox(result.otherParty, {
+            kind: "iou_marked",
+            iouId,
+            actorId: uid,
+            actorName,
+            title: "IOU awaiting confirmation",
+            body: `${actorName} marked an IOU as ${verb}. Confirm to settle it.`,
+        });
     }
     return { ok: true, settled: result.settled };
 });

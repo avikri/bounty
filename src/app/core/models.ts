@@ -80,3 +80,28 @@ export interface LeaderboardEntry {
   losses: number;
   netIou: number;
 }
+
+export type NotificationKind =
+  | 'bounty_claimed'
+  | 'proof_submitted'
+  | 'bounty_approved'
+  | 'bounty_rejected'
+  | 'bounty_resolved'
+  | 'iou_marked'
+  | 'iou_settled';
+
+/** Per-user inbox doc at notifications/{uid}/inbox/{id}. Written by Cloud Functions. */
+export interface AppNotification {
+  id: string;
+  kind: NotificationKind;
+  title: string;
+  body: string;
+  groupId?: string;
+  bountyId?: string;
+  iouId?: string;
+  actorId?: string;
+  actorName?: string;
+  amount?: number;
+  read: boolean;
+  createdAt: Date;
+}

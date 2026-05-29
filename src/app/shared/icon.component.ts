@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 export type IconName =
   | 'groups' | 'reviews' | 'post' | 'ranks' | 'me' | 'inbox'
   | 'back' | 'close' | 'plus' | 'lock' | 'apple' | 'google'
-  | 'menu' | 'check';
+  | 'menu' | 'check' | 'bell';
 
 @Component({
   selector: 'app-icon',
@@ -25,6 +25,7 @@ export type IconName =
         @case ('lock')    { <rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/> }
         @case ('menu')    { <circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="19" r="1.5"/> }
         @case ('check')   { <path d="M20 7 9 18l-5-5"/> }
+        @case ('bell')    { <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/> }
       }
     </svg>
   `,

@@ -1,9 +1,10 @@
 import { ApplicationConfig } from '@angular/core';
 import { provideRouter, withComponentInputBinding } from '@angular/router';
-import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
+import { provideFirebaseApp, initializeApp, getApp } from '@angular/fire/app';
 import { provideAuth, getAuth, connectAuthEmulator } from '@angular/fire/auth';
 import { provideFirestore, getFirestore, connectFirestoreEmulator } from '@angular/fire/firestore';
 import { provideFunctions, getFunctions, connectFunctionsEmulator } from '@angular/fire/functions';
+import { provideStorage, getStorage, connectStorageEmulator } from '@angular/fire/storage';
 import { APP_ROUTES } from './app.routes';
 import { environment } from '../environments/environment';
 
@@ -24,9 +25,14 @@ export const appConfig: ApplicationConfig = {
       return f;
     }),
     provideFunctions(() => {
-      const fn = getFunctions();
+      const fn = getFunctions(getApp(), 'australia-southeast1');
       if (useEmulators) connectFunctionsEmulator(fn, '127.0.0.1', 5001);
       return fn;
+    }),
+    provideStorage(() => {
+      const s = getStorage();
+      if (useEmulators) connectStorageEmulator(s, '127.0.0.1', 9199);
+      return s;
     }),
   ],
 };

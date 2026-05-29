@@ -13,8 +13,10 @@ interface DisplayIou {
   iou: IOU;
   counterparty: User | undefined;
   iOweThem: boolean;
+  /** I have already marked my side. */
   myMark: boolean;
-  awaitingOther: boolean;
+  /** The other party marked their side and it's my turn to confirm. */
+  theyMarked: boolean;
 }
 
 @Component({
@@ -61,12 +63,12 @@ interface DisplayIou {
                   {{ row.iOweThem ? 'You owe ' + label(row.counterparty) : label(row.counterparty) + ' owes you' }}
                 </div>
                 <div class="sub">
-                  @if (row.awaitingOther) {
-                    waiting on {{ row.iOweThem ? label(row.counterparty) : 'them' }} to confirm
-                  } @else if (row.myMark) {
-                    you marked it paid — waiting on them
+                  @if (row.myMark) {
+                    waiting for {{ label(row.counterparty) }} to confirm
+                  } @else if (row.theyMarked) {
+                    {{ label(row.counterparty) }} marked it — your turn to confirm
                   } @else {
-                    not marked yet
+                    not settled yet
                   }
                 </div>
               </div>
@@ -74,11 +76,15 @@ interface DisplayIou {
                 {{ row.iOweThem ? '−$' + row.iou.amount : '+$' + row.iou.amount }}
               </div>
               @if (isMe()) {
-                <button class="btn ghost sm"
-                        (click)="markPaid(row.iou.id)"
-                        [disabled]="row.myMark || busyId() === row.iou.id">
-                  {{ row.myMark ? 'Marked' : (busyId() === row.iou.id ? '…' : 'Mark paid') }}
-                </button>
+                @if (row.myMark) {
+                  <span class="pending-pill">Waiting…</span>
+                } @else {
+                  <button class="btn ghost sm"
+                          (click)="markPaid(row.iou.id)"
+                          [disabled]="busyId() === row.iou.id">
+                    {{ busyId() === row.iou.id ? '…' : (row.iOweThem ? 'Mark as paid' : 'Confirm received') }}
+                  </button>
+                }
               }
             </div>
           } @empty {
@@ -191,6 +197,13 @@ interface DisplayIou {
     .iou-row.settled .meat .line { color: var(--muted); font-weight: 500; }
 
     .btn.sm { padding: 6px 10px; font-size: 11px; }
+    .pending-pill {
+      font-size: 11px; font-weight: 700;
+      color: var(--warn); background: var(--warn-soft);
+      padding: 5px 10px; border-radius: 999px;
+      font-family: 'JetBrains Mono', monospace;
+      white-space: nowrap;
+    }
 
     .recent-card {
       background: var(--card);
@@ -248,13 +261,15 @@ export class UserProfilePage {
       const myMark = iOweThem
         ? iou.status === 'debtor_marked'
         : iou.status === 'creditor_marked';
-      const awaitingOther = iou.status === 'open' && !myMark;
+      const theyMarked = iOweThem
+        ? iou.status === 'creditor_marked'
+        : iou.status === 'debtor_marked';
       return {
         iou,
         counterparty: this.data.userById(otherUid),
         iOweThem,
         myMark,
-        awaitingOther,
+        theyMarked,
       };
     });
   });

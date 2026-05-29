@@ -66,8 +66,12 @@ export class AuthService {
     this.currentUser$.subscribe(async (fbUser) => {
       this._fbUser.set(fbUser);
       if (!fbUser) { this._user.set(null); return; }
-      const profile = await this.ensureUserDoc(fbUser);
-      this._user.set(profile);
+      try {
+        const profile = await this.ensureUserDoc(fbUser);
+        this._user.set(profile);
+      } catch (err) {
+        console.error('[AuthService] ensureUserDoc failed', err);
+      }
     });
   }
 

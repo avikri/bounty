@@ -1,0 +1,38 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Membership / claimant checks lean on Firestore documents.
+    function isMember(gid) {
+      return isSignedIn() &&
+        firestore.exists(/databases/(default)/documents/groups/$(gid)/members/$(request.auth.uid));
+    }
+
+    function isClaimant(gid, bid) {
+      return isSignedIn() &&
+        firestore.get(/databases/(default)/documents/groups/$(gid)/bounties/$(bid)).data.claimantId == request.auth.uid;
+    }
+
+    // Proof media: groups/{gid}/bounties/{bid}/proof/{uid}/{file}
+    match /groups/{gid}/bounties/{bid}/proof/{uid}/{fileName} {
+      // Reads limited to group members.
+      allow read: if isMember(gid);
+
+      // Only the current claimant may write, and only under their own uid path.
+      // Cap size to 100 MB and require an image or video content type.
+      allow write: if isSignedIn()
+                    && request.auth.uid == uid
+                    && isClaimant(gid, bid)
+                    && request.resource.size < 100 * 1024 * 1024
+                    && (request.resource.contentType.matches('image/.*')
+                        || request.resource.contentType.matches('video/.*'));
+
+      allow delete: if isSignedIn() && request.auth.uid == uid;
+    }
+  }
+}

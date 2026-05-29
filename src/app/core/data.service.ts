@@ -7,6 +7,7 @@ import {
   collectionData,
   doc,
   docData,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -14,18 +15,22 @@ import {
   Unsubscribe,
   updateDoc,
   where,
+  writeBatch,
 } from '@angular/fire/firestore';
 import { Functions, httpsCallable } from '@angular/fire/functions';
+import { Storage, ref, uploadBytesResumable, getDownloadURL } from '@angular/fire/storage';
 import { Observable, combineLatest, of, switchMap } from 'rxjs';
 import { map } from 'rxjs/operators';
 import {
   ActivityEvent,
+  AppNotification,
   Bounty,
   BountyState,
   Group,
   IOU,
   LeaderboardEntry,
   Member,
+  NotificationKind,
   User,
 } from './models';
 import { AuthService } from './auth.service';
@@ -148,6 +153,38 @@ function mapIou(id: string, d: IouDoc): IOU {
   };
 }
 
+interface NotificationDoc {
+  kind: NotificationKind;
+  title?: string;
+  body?: string;
+  text?: string; // legacy field name
+  groupId?: string;
+  bountyId?: string;
+  iouId?: string;
+  actorId?: string;
+  actorName?: string;
+  amount?: number;
+  read?: boolean;
+  createdAt: Timestamp;
+}
+
+function mapNotification(id: string, d: NotificationDoc): AppNotification {
+  return {
+    id,
+    kind: d.kind,
+    title: d.title ?? 'Notification',
+    body: d.body ?? d.text ?? '',
+    groupId: d.groupId,
+    bountyId: d.bountyId,
+    iouId: d.iouId,
+    actorId: d.actorId,
+    actorName: d.actorName,
+    amount: d.amount,
+    read: d.read ?? false,
+    createdAt: toDate(d.createdAt),
+  };
+}
+
 /* ── DataService ───────────────────────────────────────────────────── */
 
 @Injectable({ providedIn: 'root' })
@@ -155,6 +192,7 @@ export class DataService {
   private readonly auth = inject(AuthService);
   private readonly firestore = inject(Firestore);
   private readonly functions = inject(Functions);
+  private readonly storage = inject(Storage);
   private readonly toast = inject(ToastService);
 
   /* Backing signals — same public surface as the in-memory version. */
@@ -162,11 +200,14 @@ export class DataService {
   private readonly _groups   = signal<Group[]>([]);
   private readonly _bounties = signal<Bounty[]>([]);
   private readonly _ious     = signal<IOU[]>([]);
+  private readonly _notifications = signal<AppNotification[]>([]);
 
   readonly users    = this._users.asReadonly();
   readonly groups   = this._groups.asReadonly();
   readonly bounties = this._bounties.asReadonly();
   readonly ious     = this._ious.asReadonly();
+  readonly notifications = this._notifications.asReadonly();
+  readonly unreadCount = computed(() => this._notifications().filter((n) => !n.read).length);
 
   get currentUserId(): string {
     return this.auth.fbUser()?.uid ?? '';
@@ -229,6 +270,20 @@ export class DataService {
       (err) => this.reportListenerError('IOUs', err),
     );
     this.groupSubs.set('__ious__', [sub1, sub2]);
+
+    // Listen to my notification inbox, most recent first.
+    const inboxQuery = query(
+      collection(this.firestore, 'notifications', uid, 'inbox'),
+      orderBy('createdAt', 'desc'),
+      limit(100),
+    );
+    const inboxSub = onSnapshot(inboxQuery,
+      (snap) => this._notifications.set(
+        snap.docs.map((d) => mapNotification(d.id, d.data() as NotificationDoc)),
+      ),
+      (err) => this.reportListenerError('notifications', err),
+    );
+    this.groupSubs.set('__notifs__', [inboxSub]);
   }
 
   private reportListenerError(scope: string, err: unknown): void {
@@ -251,12 +306,13 @@ export class DataService {
     this._groups.set([]);
     this._bounties.set([]);
     this._ious.set([]);
+    this._notifications.set([]);
   }
 
   private reconcileGroupListeners(desiredIds: string[]): void {
     // Detach removed groups.
     for (const id of [...this.groupSubs.keys()]) {
-      if (id === '__ious__') continue;
+      if (id === '__ious__' || id === '__notifs__') continue;
       if (!desiredIds.includes(id)) {
         for (const u of this.groupSubs.get(id) ?? []) u();
         this.groupSubs.delete(id);
@@ -313,7 +369,7 @@ export class DataService {
   }
 
   private rebuildGroupsSignal(updatedGid?: string, updatedDoc?: GroupDoc | null): void {
-    const ids = [...this.groupSubs.keys()].filter((k) => k !== '__ious__');
+    const ids = [...this.groupSubs.keys()].filter((k) => k !== '__ious__' && k !== '__notifs__');
     const groups: Group[] = [];
     for (const id of ids) {
       // If this is the just-updated group, prefer its fresh doc; otherwise reuse the cached one.
@@ -541,12 +597,44 @@ export class DataService {
     return this.callable('claimBounty', { groupId: b.groupId, bountyId });
   }
 
-  submitProof(bountyId: string, note: string): Promise<void> {
+  /**
+   * Upload one proof file to groups/{gid}/bounties/{bid}/proof/{uid}/{file}.
+   * Reports 0–100 progress via the callback and resolves with the download URL.
+   */
+  uploadProofFile(
+    groupId: string,
+    bountyId: string,
+    file: File,
+    onProgress?: (pct: number) => void,
+  ): Promise<string> {
+    const uid = this.currentUserId;
+    if (!uid) return Promise.reject(new Error('Not signed in'));
+    const safeName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const path = `groups/${groupId}/bounties/${bountyId}/proof/${uid}/${safeName}`;
+    const task = uploadBytesResumable(ref(this.storage, path), file, {
+      contentType: file.type,
+    });
+    return new Promise<string>((resolve, reject) => {
+      task.on('state_changed',
+        (snap) => onProgress?.(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
+        (err) => reject(err),
+        async () => {
+          try {
+            resolve(await getDownloadURL(task.snapshot.ref));
+          } catch (err) {
+            reject(err);
+          }
+        },
+      );
+    });
+  }
+
+  submitProof(bountyId: string, note: string, urls: string[] = []): Promise<void> {
     const b = this.bountyById(bountyId);
     if (!b) return Promise.resolve();
     return this.callable('submitProof', {
       groupId: b.groupId, bountyId,
-      proof: { urls: [], note }, // photo upload wired separately
+      proof: { urls, note },
     });
   }
 
@@ -578,6 +666,26 @@ export class DataService {
 
   markIouPaid(iouId: string): Promise<{ settled: boolean }> {
     return this.callableRaw<{ iouId: string }, { settled: boolean }>('markIouPaid', { iouId });
+  }
+
+  /** Mark a single notification read (rules allow self-update of `read`). */
+  async markNotificationRead(nid: string): Promise<void> {
+    const uid = this.currentUserId;
+    if (!uid) return;
+    await updateDoc(doc(this.firestore, 'notifications', uid, 'inbox', nid), { read: true });
+  }
+
+  /** Mark every currently-loaded unread notification read in one batch. */
+  async markAllRead(): Promise<void> {
+    const uid = this.currentUserId;
+    if (!uid) return;
+    const unread = this._notifications().filter((n) => !n.read);
+    if (unread.length === 0) return;
+    const batch = writeBatch(this.firestore);
+    for (const n of unread) {
+      batch.update(doc(this.firestore, 'notifications', uid, 'inbox', n.id), { read: true });
+    }
+    await batch.commit();
   }
 
   regenerateInviteCode(groupId: string): Promise<{ inviteCode: string }> {

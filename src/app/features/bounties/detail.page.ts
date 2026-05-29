@@ -7,19 +7,19 @@ import { AvatarComponent } from '../../shared/avatar.component';
 import { StateBadgeComponent } from '../../shared/state-badge.component';
 import { CountdownPipe, RelativePipe } from '../../shared/countdown.pipe';
 import { IconComponent } from '../../shared/icon.component';
+import { ProofGalleryComponent } from '../../shared/proof-gallery.component';
 import { ToastService } from '../../shared/toast.service';
 
 @Component({
   selector: 'app-bounty-detail',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, AvatarComponent, StateBadgeComponent, CountdownPipe, RelativePipe, IconComponent],
+  imports: [RouterLink, AvatarComponent, StateBadgeComponent, CountdownPipe, RelativePipe, IconComponent, ProofGalleryComponent],
   template: `
     @if (bounty(); as b) {
       <div class="wrap">
         <div class="navrow">
           <a class="back" [routerLink]="['/g', b.groupId]"><app-icon name="back" [size]="16" /></a>
-          <div class="path">/{{ shortGroup() }}/b/{{ b.id }}</div>
         </div>
 
         <app-state-badge [bountyState]="b.state" />
@@ -65,17 +65,8 @@ import { ToastService } from '../../shared/toast.service';
         @if (b.proof) {
           <div class="kicker" style="margin-top: 18px;">Proof submitted</div>
           @if (b.proof.urls.length) {
-            <div class="proof-grid">
-              @for (u of b.proof.urls; track u) {
-                <a class="proof-tile" [href]="u" target="_blank" rel="noopener">
-                  @if (isImage(u)) {
-                    <img [src]="u" alt="proof" />
-                  } @else {
-                    <span class="ext">{{ shortUrl(u) }}</span>
-                  }
-                </a>
-              }
-            </div>
+            <app-proof-gallery [urls]="b.proof.urls" />
+            <div style="height: 8px;"></div>
           }
           @if (b.proof.note) {
             <div class="proof-note">{{ b.proof.note }}</div>
@@ -121,7 +112,7 @@ import { ToastService } from '../../shared/toast.service';
             }
           }
           <div style="height: 8px;"></div>
-          <button class="btn full ghost">Share</button>
+          <button class="btn full ghost" (click)="share()">Share</button>
         </div>
       </div>
     } @else {
@@ -184,24 +175,6 @@ import { ToastService } from '../../shared/toast.service';
       padding: 12px 14px;
       font-size: 13px; line-height: 1.5;
     }
-
-    .proof-grid {
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
-      margin-bottom: 8px;
-    }
-    .proof-tile {
-      aspect-ratio: 1;
-      background: var(--bg-2);
-      border-radius: 14px;
-      overflow: hidden;
-      display: grid; place-items: center;
-      color: var(--muted);
-      font-size: 11px;
-      font-family: 'JetBrains Mono', monospace;
-      text-decoration: none;
-    }
-    .proof-tile img { width: 100%; height: 100%; object-fit: cover; }
-    .proof-tile .ext { padding: 6px; text-align: center; word-break: break-all; }
 
     .timeline {
       list-style: none; padding: 0; margin: 0;
@@ -271,8 +244,6 @@ export class BountyDetailPage {
     return b?.claimantId ? this.data.userById(b.claimantId) : undefined;
   });
 
-  protected shortGroup = computed(() => this.bounty()?.groupId.replace(/^g-/, '') ?? '');
-
   protected cta = computed<'claim' | 'submit' | 'review' | 'view'>(() => {
     const b = this.bounty();
     if (!b) return 'view';
@@ -322,6 +293,29 @@ export class BountyDetailPage {
     this.router.navigate(['/reviews'], { queryParams: { id: this.bounty()?.id } });
   }
 
+  protected async share(): Promise<void> {
+    const b = this.bounty();
+    if (!b) return;
+    const url = window.location.href;
+    const title = b.title;
+    const text = `${b.title} — $${b.price} bounty`;
+    const nav = navigator as Navigator & { share?: (d: ShareData) => Promise<void> };
+    if (typeof nav.share === 'function') {
+      try {
+        await nav.share({ title, text, url });
+        return;
+      } catch (e) {
+        if ((e as DOMException)?.name === 'AbortError') return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      this.toast.success('Link copied to clipboard.');
+    } catch {
+      this.toast.error('Could not share or copy link.');
+    }
+  }
+
   protected actorLabel(uid: string): string {
     if (uid === 'system') return 'System';
     if (uid === this.me.uid) return 'you';
@@ -339,11 +333,4 @@ export class BountyDetailPage {
     }[kind] ?? kind;
   }
 
-  protected isImage(url: string): boolean {
-    return /\.(png|jpe?g|gif|webp|avif)(\?|#|$)/i.test(url);
-  }
-
-  protected shortUrl(url: string): string {
-    try { return new URL(url).hostname; } catch { return url.slice(0, 24); }
-  }
 }

@@ -25,6 +25,10 @@ export const APP_ROUTES: Routes = [
         loadComponent: () => import('./features/reviews/review-queue.page').then((m) => m.ReviewQueuePage),
       },
       {
+        path: 'inbox',
+        loadComponent: () => import('./features/inbox/inbox.page').then((m) => m.InboxPage),
+      },
+      {
         path: 'u/:userId',
         loadComponent: () => import('./features/profile/user-profile.page').then((m) => m.UserProfilePage),
       },
