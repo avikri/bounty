@@ -50,7 +50,7 @@ type FilterKey = 'all' | 'available' | 'claimed' | 'pending_review' | 'mine';
         </div>
 
         <div class="filters">
-          @for (f of filters; track f.key) {
+          @for (f of filters(); track f.key) {
             <button
               class="pill"
               [class.active]="filter() === f.key"
@@ -144,8 +144,23 @@ export class BountyFeedPage {
   private readonly data = inject(DataService);
 
   protected readonly me = this.data.me;
-  protected readonly filters: { key: FilterKey; label: string; count?: number }[] = [];
   protected readonly filter = signal<FilterKey>('all');
+
+  /**
+   * Filter pills with live counts. A computed so the counts recompute as
+   * bounties stream in from Firestore — touching `bountiesInGroup` (which reads
+   * the bounties signal) registers the dependency.
+   */
+  protected readonly filters = computed<{ key: FilterKey; label: string; count?: number }[]>(() => {
+    const id = this.group()?.id ?? '';
+    return [
+      { key: 'all',            label: 'All',         count: this.data.bountiesInGroup(id).length },
+      { key: 'available',      label: 'Available',   count: this.data.bountiesInGroup(id, 'available').length },
+      { key: 'claimed',        label: 'In progress', count: this.data.bountiesInGroup(id, 'claimed').length },
+      { key: 'pending_review', label: 'Pending',     count: this.data.bountiesInGroup(id, 'pending_review').length },
+      { key: 'mine',           label: 'Mine' },
+    ];
+  });
 
   private readonly groupId = toSignal(
     this.route.paramMap, { initialValue: this.route.snapshot.paramMap },
@@ -170,22 +185,6 @@ export class BountyFeedPage {
     return this.data.bountiesInGroup(id, f as BountyState);
   });
 
-  constructor() {
-    // dynamic counts in filter pills
-    const filterDef: { key: FilterKey; label: string; stateForCount?: BountyState | 'mine' | 'all' }[] = [
-      { key: 'all',            label: 'All',         stateForCount: 'all' },
-      { key: 'available',      label: 'Available',   stateForCount: 'available' },
-      { key: 'claimed',        label: 'In progress', stateForCount: 'claimed' },
-      { key: 'pending_review', label: 'Pending',     stateForCount: 'pending_review' },
-      { key: 'mine',           label: 'Mine',        stateForCount: 'mine' },
-    ];
-    // We materialize counts on each render by computing in template, but here we just store labels.
-    // For simplicity, counts are appended dynamically via computed below.
-    this.filters.push(...filterDef.map((f) => ({ key: f.key, label: f.label, count: undefined })));
-    // wire computed counts:
-    queueMicrotask(() => this.refreshCounts());
-  }
-
   protected goCreate(): void {
     const id = this.group()?.id;
     if (id) this.router.navigate(['/g', id, 'new']);
@@ -202,18 +201,5 @@ export class BountyFeedPage {
     const mine = board.find((b) => b.userId === this.data.currentUserId);
     if (!mine) return 'unranked';
     return `you're #${mine.rank}${mine.rank === 1 ? ' 🥇' : ''}`;
-  }
-
-  private refreshCounts(): void {
-    const id = this.group()?.id;
-    if (!id) return;
-    const update = (k: FilterKey, n: number) => {
-      const i = this.filters.findIndex((f) => f.key === k);
-      if (i >= 0) this.filters[i] = { ...this.filters[i]!, count: n };
-    };
-    update('all',            this.data.bountiesInGroup(id).length);
-    update('available',      this.data.bountiesInGroup(id, 'available').length);
-    update('claimed',        this.data.bountiesInGroup(id, 'claimed').length);
-    update('pending_review', this.data.bountiesInGroup(id, 'pending_review').length);
   }
 }

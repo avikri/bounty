@@ -45,10 +45,18 @@ service cloud.firestore {
       /* members subcollection */
       match /members/{userId} {
         allow read: if isMember(gid);
-        // Members are created via invite-redemption Cloud Function (preferred);
-        // direct self-create is allowed for a v1 client-only flow.
-        allow create: if isSelf(userId) && request.resource.data.role == 'member';
-        allow update, delete: if isOwner(gid) || isSelf(userId);
+        // Membership is granted only through the joinGroup / createGroup Cloud
+        // Functions (which validate the invite code). No client self-create —
+        // otherwise any signed-in user could add themselves to any group and
+        // read all of its bounties.
+        allow create: if false;
+        // Owners may change a member's role only. points/wins/losses and the
+        // cached profile fields are written exclusively by Cloud Functions, so
+        // a member cannot promote themselves or forge their leaderboard score.
+        allow update: if isOwner(gid)
+                       && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']);
+        // A member can leave; an owner can remove members.
+        allow delete: if isOwner(gid) || isSelf(userId);
       }
 
       /* bounties */

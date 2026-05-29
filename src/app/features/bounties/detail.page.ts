@@ -55,7 +55,7 @@ import { ToastService } from '../../shared/toast.service';
             @if (claimant(); as c) {
               <app-avatar [initials]="c.initials" [variant]="c.avatarVariant" />
               <div>
-                <div class="name">{{ c.uid === me.uid ? 'you' : c.displayName }}</div>
+                <div class="name">{{ c.uid === me().uid ? 'you' : c.displayName }}</div>
                 <div class="meta">{{ c.totalPoints }} pts</div>
               </div>
             }
@@ -215,7 +215,10 @@ export class BountyDetailPage {
   private readonly router = inject(Router);
   private readonly data = inject(DataService);
   private readonly toast = inject(ToastService);
-  protected readonly me = this.data.me();
+  // The signal, not a one-time snapshot: on a deep-link the app-user profile
+  // resolves asynchronously, so reading it eagerly could freeze `me` as the
+  // signed-out placeholder (uid === '') for the component's lifetime.
+  protected readonly me = this.data.me;
 
   private readonly params = toSignal(this.route.paramMap, { initialValue: this.route.snapshot.paramMap });
 
@@ -247,7 +250,7 @@ export class BountyDetailPage {
   protected cta = computed<'claim' | 'submit' | 'review' | 'view'>(() => {
     const b = this.bounty();
     if (!b) return 'view';
-    const meId = this.me.uid;
+    const meId = this.me().uid;
     if (b.state === 'available' && b.posterId !== meId) return 'claim';
     if (b.state === 'claimed' && b.claimantId === meId) return 'submit';
     if (b.state === 'pending_review' && b.posterId === meId) return 'review';
@@ -260,9 +263,9 @@ export class BountyDetailPage {
     if (b.state === 'successful') return 'Bounty completed';
     if (b.state === 'failed')     return 'Bounty failed';
     if (b.state === 'expired')    return 'Bounty expired';
-    if (b.state === 'claimed' && b.claimantId !== this.me.uid)        return 'Claimed by someone else';
-    if (b.state === 'pending_review' && b.posterId !== this.me.uid)   return 'Awaiting OP decision';
-    if (b.state === 'available' && b.posterId === this.me.uid)        return 'You posted this — wait for a claim';
+    if (b.state === 'claimed' && b.claimantId !== this.me().uid)        return 'Claimed by someone else';
+    if (b.state === 'pending_review' && b.posterId !== this.me().uid)   return 'Awaiting OP decision';
+    if (b.state === 'available' && b.posterId === this.me().uid)        return 'You posted this — wait for a claim';
     return 'View only';
   });
 
@@ -318,7 +321,7 @@ export class BountyDetailPage {
 
   protected actorLabel(uid: string): string {
     if (uid === 'system') return 'System';
-    if (uid === this.me.uid) return 'you';
+    if (uid === this.me().uid) return 'you';
     return this.data.userById(uid)?.handle ?? 'someone';
   }
 
