@@ -193,7 +193,7 @@ export async function postBounty(
     posterId: poster.uid,
     claimantId: null,
     expiresAt: Timestamp.fromDate(new Date(Date.now() + (opts.expiresInMs ?? WEEK_MS))),
-    createdAt: Timestamp.now(),
+    createdAt: serverTimestamp(),
   });
   return ref.id;
 }

@@ -23,12 +23,17 @@ service firebase.storage {
       // Reads limited to group members.
       allow read: if isMember(gid);
 
-      // Only the current claimant may write, and only under their own uid path.
-      // Cap size to 100 MB and require an image or video content type.
+      // Only the current claimant may write, and only under their own uid
+      // path, and only while the bounty is still `claimed` (i.e. awaiting
+      // proof) — this closes the window where a claimant could keep uploading
+      // 100 MB files forever after the bounty is resolved. Cap size to 25 MB
+      // and require an image or video content type. (Two get()s on the same
+      // bounty doc are cached and billed once per request.)
       allow write: if isSignedIn()
                     && request.auth.uid == uid
                     && isClaimant(gid, bid)
-                    && request.resource.size < 100 * 1024 * 1024
+                    && firestore.get(/databases/(default)/documents/groups/$(gid)/bounties/$(bid)).data.state == 'claimed'
+                    && request.resource.size < 25 * 1024 * 1024
                     && (request.resource.contentType.matches('image/.*')
                         || request.resource.contentType.matches('video/.*'));
 

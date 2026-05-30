@@ -1,4 +1,5 @@
 import { FirebaseApp, getApp, getApps, initializeApp } from 'firebase/app';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 import { Auth, getAuth, connectAuthEmulator } from 'firebase/auth';
 import { Firestore, getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { Functions, getFunctions, connectFunctionsEmulator } from 'firebase/functions';
@@ -11,11 +12,31 @@ let _db: Firestore;
 let _functions: Functions;
 let _storage: FirebaseStorage;
 let _emulatorsConnected = false;
+let _appCheckInit = false;
 
 function ensureApp(): FirebaseApp {
   if (_app) return _app;
   _app = getApps().length ? getApp() : initializeApp(environment.firebase);
+  ensureAppCheck(_app);
   return _app;
+}
+
+/**
+ * Initialize Firebase App Check so the backend can reject calls that don't
+ * originate from a genuine instance of this app. Opt-in: only runs when an
+ * appCheckSiteKey is configured. Skipped against the emulators (App Check
+ * can't be attested locally). The Cloud Functions only enforce App Check when
+ * their ENFORCE_APP_CHECK flag is set, so leaving the key blank is safe.
+ */
+function ensureAppCheck(app: FirebaseApp): void {
+  if (_appCheckInit) return;
+  _appCheckInit = true;
+  const env = environment as { useEmulators?: boolean; appCheckSiteKey?: string };
+  if (env.useEmulators || !env.appCheckSiteKey) return;
+  initializeAppCheck(app, {
+    provider: new ReCaptchaEnterpriseProvider(env.appCheckSiteKey),
+    isTokenAutoRefreshEnabled: true,
+  });
 }
 
 export function getFirebase() {

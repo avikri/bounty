@@ -10,4 +10,6 @@ export const environment = {
     messagingSenderId: '',
     appId:             '',
   },
+  // reCAPTCHA Enterprise site key for App Check (required in production).
+  appCheckSiteKey: '',
 };

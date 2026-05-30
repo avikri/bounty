@@ -7,14 +7,14 @@
  * path, and only image/* or video/* content types. Reads are limited to group
  * members.
  *
- * Note on the 100 MB cap: the rule enforces `request.resource.size < 100MB`,
- * but uploading a real 100 MB object through the emulator in a unit test is
- * impractical, so that boundary is asserted by the client guard / documented
- * rather than exercised here. The client also caps images at 10 MB while the
- * rule allows up to 100 MB — a known, intentional divergence (see G3).
+ * Note on the size cap: the rule enforces `request.resource.size < 25MB`, but
+ * uploading a large object through the emulator in a unit test is impractical,
+ * so that boundary is documented rather than exercised here. The rule also
+ * restricts writes to bounties still in the `claimed` state, so a claimant
+ * can't keep uploading after the bounty is resolved.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { Timestamp, addDoc, collection } from 'firebase/firestore';
+import { Timestamp, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import {
   FirebaseStorage,
   connectStorageEmulator,
@@ -64,7 +64,7 @@ async function seedClaimed(): Promise<Fixture> {
       title: 'Proof me', description: 'x', price: 5, currency: 'USD',
       state: 'available', posterId: poster.uid, claimantId: null,
       expiresAt: Timestamp.fromDate(new Date(Date.now() + WEEK_MS)),
-      createdAt: Timestamp.now(),
+      createdAt: serverTimestamp(),
     },
   );
   await claimant.call('claimBounty', { groupId, bountyId: bountyRef.id });
