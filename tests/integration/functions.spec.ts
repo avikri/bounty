@@ -13,6 +13,7 @@ import {
   getDoc,
   getDocs,
   query,
+  serverTimestamp,
   updateDoc,
   where,
   doc,
@@ -57,7 +58,7 @@ async function seed(price = 5): Promise<Fixture> {
       posterId: poster.uid,
       claimantId: null,
       expiresAt: Timestamp.fromDate(new Date(Date.now() + WEEK_MS)),
-      createdAt: Timestamp.now(),
+      createdAt: serverTimestamp(),
     },
   );
 
@@ -148,7 +149,7 @@ describe('claimBounty', () => {
         title: 'Overdue', description: 'x', price: 5, currency: 'USD',
         state: 'available', posterId: f.poster.uid, claimantId: null,
         expiresAt: Timestamp.fromDate(new Date(Date.now() - 1000)),
-        createdAt: Timestamp.now(),
+        createdAt: serverTimestamp(),
       },
     );
     await expectReject(
@@ -502,7 +503,7 @@ describe('[H1] leaderboard aggregate across multiple cycles', () => {
         title: `Chore $${price}`, description: 'x', price, currency: 'USD',
         state: 'available', posterId: poster.uid, claimantId: null,
         expiresAt: Timestamp.fromDate(new Date(Date.now() + WEEK_MS)),
-        createdAt: Timestamp.now(),
+        createdAt: serverTimestamp(),
       });
       return ref.id;
     }

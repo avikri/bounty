@@ -59,10 +59,19 @@ const admin = __importStar(require("firebase-admin"));
 // emulator and production.
 const firestore_1 = require("firebase-admin/firestore");
 const logger = __importStar(require("firebase-functions/logger"));
+const node_crypto_1 = require("node:crypto");
 const expiry_1 = require("./expiry");
 admin.initializeApp();
 const db = admin.firestore();
 (0, firebase_functions_1.setGlobalOptions)({ maxInstances: 10, region: "australia-southeast1" });
+// App Check is enforced on every callable in production so a leaked (public)
+// API key alone can't drive the backend. IMPORTANT: this must ship together
+// with client-side App Check init (initializeAppCheck) — otherwise every
+// production call fails with "unauthenticated". App Check can't be attested
+// against the emulator, so enforcement is disabled there (the emulator sets
+// FUNCTIONS_EMULATOR=true) to keep the integration/e2e suites runnable.
+const ENFORCE_APP_CHECK = process.env.FUNCTIONS_EMULATOR !== "true";
+const CALLABLE_OPTS = { enforceAppCheck: ENFORCE_APP_CHECK };
 const MAX_LEADERBOARD_ENTRIES = 100;
 const MAX_PROOF_NOTE_CHARS = 500;
 const MAX_REJECTION_REASON_CHARS = 500;
@@ -85,6 +94,45 @@ function requireString(value, name) {
         throw new https_1.HttpsError("invalid-argument", `${name} required.`);
     }
     return value;
+}
+// Per-user fixed-window caps — generous for real use, tight enough to stop
+// tight-loop abuse / cost amplification (esp. unbounded group creation and
+// invite-code brute-forcing). Counters live in rateLimits/{uid}, which is
+// Cloud-Function-only (denied to clients by firestore.rules).
+const RATE_RULES = {
+    createGroup: { max: 10, windowSec: 3600 },
+    joinGroup: { max: 20, windowSec: 3600 },
+    regenerateInviteCode: { max: 20, windowSec: 3600 },
+    claimBounty: { max: 60, windowSec: 3600 },
+    submitProof: { max: 60, windowSec: 3600 },
+    approveBounty: { max: 120, windowSec: 3600 },
+    rejectBounty: { max: 120, windowSec: 3600 },
+    markIouPaid: { max: 120, windowSec: 3600 },
+};
+/**
+ * Fixed-window per-user rate limit. Throws `resource-exhausted` once a user
+ * exceeds the configured number of calls for `action` within its window.
+ */
+async function enforceRateLimit(uid, action) {
+    const rule = RATE_RULES[action];
+    if (!rule)
+        return;
+    const ref = db.doc(`rateLimits/${uid}`);
+    const nowMs = Date.now();
+    const windowMs = rule.windowSec * 1000;
+    await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const all = (snap.exists ? snap.data() : {});
+        const bucket = all[action];
+        if (!bucket || nowMs - bucket.windowStart >= windowMs) {
+            tx.set(ref, { [action]: { count: 1, windowStart: nowMs } }, { merge: true });
+            return;
+        }
+        if (bucket.count >= rule.max) {
+            throw new https_1.HttpsError("resource-exhausted", "Too many requests — please slow down and try again later.");
+        }
+        tx.set(ref, { [action]: { count: bucket.count + 1, windowStart: bucket.windowStart } }, { merge: true });
+    });
 }
 /** Insert or replace an entry, then sort by points desc and cap. */
 function upsertLeaderboardEntry(current, entry) {
@@ -124,9 +172,10 @@ async function userName(uid) {
     }
 }
 /* ── claimBounty ──────────────────────────────────────────────────── */
-exports.claimBounty = (0, https_1.onCall)(async (req) => {
+exports.claimBounty = (0, https_1.onCall)(CALLABLE_OPTS, async (req) => {
     var _a;
     const uid = requireAuth(req);
+    await enforceRateLimit(uid, "claimBounty");
     const data = ((_a = req.data) !== null && _a !== void 0 ? _a : {});
     const groupId = requireString(data.groupId, "groupId");
     const bountyId = requireString(data.bountyId, "bountyId");
@@ -168,9 +217,10 @@ exports.claimBounty = (0, https_1.onCall)(async (req) => {
     return { ok: true };
 });
 /* ── submitProof ──────────────────────────────────────────────────── */
-exports.submitProof = (0, https_1.onCall)(async (req) => {
+exports.submitProof = (0, https_1.onCall)(CALLABLE_OPTS, async (req) => {
     var _a;
     const uid = requireAuth(req);
+    await enforceRateLimit(uid, "submitProof");
     const data = ((_a = req.data) !== null && _a !== void 0 ? _a : {});
     const groupId = requireString(data.groupId, "groupId");
     const bountyId = requireString(data.bountyId, "bountyId");
@@ -227,9 +277,10 @@ exports.submitProof = (0, https_1.onCall)(async (req) => {
     return { ok: true };
 });
 /* ── approveBounty ────────────────────────────────────────────────── */
-exports.approveBounty = (0, https_1.onCall)(async (req) => {
+exports.approveBounty = (0, https_1.onCall)(CALLABLE_OPTS, async (req) => {
     var _a;
     const uid = requireAuth(req);
+    await enforceRateLimit(uid, "approveBounty");
     const data = ((_a = req.data) !== null && _a !== void 0 ? _a : {});
     const groupId = requireString(data.groupId, "groupId");
     const bountyId = requireString(data.bountyId, "bountyId");
@@ -332,9 +383,10 @@ exports.approveBounty = (0, https_1.onCall)(async (req) => {
     return { ok: true };
 });
 /* ── rejectBounty ─────────────────────────────────────────────────── */
-exports.rejectBounty = (0, https_1.onCall)(async (req) => {
+exports.rejectBounty = (0, https_1.onCall)(CALLABLE_OPTS, async (req) => {
     var _a;
     const uid = requireAuth(req);
+    await enforceRateLimit(uid, "rejectBounty");
     const data = ((_a = req.data) !== null && _a !== void 0 ? _a : {});
     const groupId = requireString(data.groupId, "groupId");
     const bountyId = requireString(data.bountyId, "bountyId");
@@ -446,9 +498,12 @@ const INVITE_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I/O/0/1
 const INVITE_CODE_LEN = 6;
 const MAX_GROUP_NAME = 60;
 function randomInviteCode() {
+    // crypto.randomInt is a CSPRNG — unlike Math.random(), its output isn't
+    // predictable from observed codes, so invite codes can't be guessed by
+    // reconstructing the PRNG state.
     let s = "";
     for (let i = 0; i < INVITE_CODE_LEN; i++) {
-        s += INVITE_CODE_ALPHABET[Math.floor(Math.random() * INVITE_CODE_ALPHABET.length)];
+        s += INVITE_CODE_ALPHABET[(0, node_crypto_1.randomInt)(INVITE_CODE_ALPHABET.length)];
     }
     return s;
 }
@@ -461,9 +516,10 @@ async function uniqueInviteCode() {
     }
     throw new https_1.HttpsError("internal", "Could not allocate invite code.");
 }
-exports.createGroup = (0, https_1.onCall)(async (req) => {
+exports.createGroup = (0, https_1.onCall)(CALLABLE_OPTS, async (req) => {
     var _a, _b, _c, _d, _e;
     const uid = requireAuth(req);
+    await enforceRateLimit(uid, "createGroup");
     const data = ((_a = req.data) !== null && _a !== void 0 ? _a : {});
     const name = requireString(data.name, "name").slice(0, MAX_GROUP_NAME).trim();
     if (name.length === 0) {
@@ -517,9 +573,10 @@ exports.createGroup = (0, https_1.onCall)(async (req) => {
     return { ok: true, groupId: groupRef.id, inviteCode };
 });
 /* ── joinGroup ────────────────────────────────────────────────────── */
-exports.joinGroup = (0, https_1.onCall)(async (req) => {
+exports.joinGroup = (0, https_1.onCall)(CALLABLE_OPTS, async (req) => {
     var _a;
     const uid = requireAuth(req);
+    await enforceRateLimit(uid, "joinGroup");
     const data = ((_a = req.data) !== null && _a !== void 0 ? _a : {});
     const inviteCode = requireString(data.inviteCode, "inviteCode")
         .trim()
@@ -583,9 +640,10 @@ exports.joinGroup = (0, https_1.onCall)(async (req) => {
     return { ok: true, groupId };
 });
 /* ── regenerateInviteCode ─────────────────────────────────────────── */
-exports.regenerateInviteCode = (0, https_1.onCall)(async (req) => {
+exports.regenerateInviteCode = (0, https_1.onCall)(CALLABLE_OPTS, async (req) => {
     var _a;
     const uid = requireAuth(req);
+    await enforceRateLimit(uid, "regenerateInviteCode");
     const data = ((_a = req.data) !== null && _a !== void 0 ? _a : {});
     const groupId = requireString(data.groupId, "groupId");
     const groupRef = db.doc(`groups/${groupId}`);
@@ -606,9 +664,10 @@ exports.regenerateInviteCode = (0, https_1.onCall)(async (req) => {
     return { inviteCode: code };
 });
 /* ── markIouPaid ──────────────────────────────────────────────────── */
-exports.markIouPaid = (0, https_1.onCall)(async (req) => {
+exports.markIouPaid = (0, https_1.onCall)(CALLABLE_OPTS, async (req) => {
     var _a;
     const uid = requireAuth(req);
+    await enforceRateLimit(uid, "markIouPaid");
     const data = ((_a = req.data) !== null && _a !== void 0 ? _a : {});
     const iouId = requireString(data.iouId, "iouId");
     const iouRef = db.doc(`ious/${iouId}`);

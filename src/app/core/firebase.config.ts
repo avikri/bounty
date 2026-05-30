@@ -1,4 +1,5 @@
 import { FirebaseApp, getApp, getApps, initializeApp } from 'firebase/app';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 import { Auth, getAuth, connectAuthEmulator } from 'firebase/auth';
 import { Firestore, getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { Functions, getFunctions, connectFunctionsEmulator } from 'firebase/functions';
@@ -11,11 +12,39 @@ let _db: Firestore;
 let _functions: Functions;
 let _storage: FirebaseStorage;
 let _emulatorsConnected = false;
+let _appCheckInit = false;
 
 function ensureApp(): FirebaseApp {
   if (_app) return _app;
   _app = getApps().length ? getApp() : initializeApp(environment.firebase);
+  ensureAppCheck(_app);
   return _app;
+}
+
+/**
+ * Initialize Firebase App Check so the backend can reject calls that don't
+ * originate from a genuine instance of this app (the Cloud Functions enforce
+ * App Check in production). Skipped against the emulators, which can't attest
+ * App Check, and when no site key is configured yet.
+ */
+function ensureAppCheck(app: FirebaseApp): void {
+  if (_appCheckInit) return;
+  _appCheckInit = true;
+  const env = environment as { useEmulators?: boolean; appCheckSiteKey?: string };
+  if (env.useEmulators) return;
+  if (!env.appCheckSiteKey) {
+    if (environment.production) {
+      console.warn(
+        '[firebase] App Check site key is not set — callables will fail in ' +
+          'production. Set environment.appCheckSiteKey.',
+      );
+    }
+    return;
+  }
+  initializeAppCheck(app, {
+    provider: new ReCaptchaEnterpriseProvider(env.appCheckSiteKey),
+    isTokenAutoRefreshEnabled: true,
+  });
 }
 
 export function getFirebase() {

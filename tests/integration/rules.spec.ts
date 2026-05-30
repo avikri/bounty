@@ -14,6 +14,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  serverTimestamp,
   setDoc,
   updateDoc,
 } from 'firebase/firestore';
@@ -58,7 +59,9 @@ function availableBounty(posterId: string) {
     posterId,
     claimantId: null,
     expiresAt: Timestamp.fromDate(new Date(Date.now() + WEEK_MS)),
-    createdAt: Timestamp.now(),
+    // serverTimestamp() resolves to request.time, which the create rule
+    // requires (mirrors DataService.postBounty).
+    createdAt: serverTimestamp(),
   };
 }
 
@@ -73,16 +76,24 @@ afterAll(async () => {
 });
 
 describe('users/{userId}', () => {
-  it('allows a signed-in user to read any profile but only write their own', async () => {
+  it('lets a user read and write only their own profile', async () => {
     const a = await createUser('A');
     const b = await createUser('B');
 
-    // Read someone else's profile — allowed for any signed-in user.
-    const other = await getDoc(doc(a.db, 'users', b.uid));
-    expect(other.exists()).toBe(true);
+    // Read own profile — allowed.
+    const own = await getDoc(doc(a.db, 'users', a.uid));
+    expect(own.exists()).toBe(true);
 
-    // Update own profile — allowed.
+    // Read someone else's profile — denied (no user-base enumeration).
+    await expectReject(getDoc(doc(a.db, 'users', b.uid)));
+
+    // Update own profile field — allowed (in the editable whitelist).
     await updateDoc(doc(a.db, 'users', a.uid), { displayName: 'A renamed' });
+
+    // Forge own totalPoints — denied (CF-maintained aggregate).
+    await expectReject(
+      updateDoc(doc(a.db, 'users', a.uid), { totalPoints: 9999 }),
+    );
 
     // Update someone else's — denied.
     await expectReject(

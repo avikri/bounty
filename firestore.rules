@@ -30,16 +30,35 @@ service cloud.firestore {
 
     /* ── users ───────────────────────────────────────────────────── */
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSelf(userId);
+      // Self-only read: the client only ever reads its own user doc; all
+      // other profile data comes from the per-group `members` subcollection
+      // (gated by isMember). This blocks full user-base enumeration.
+      allow read: if isSelf(userId);
+      // totalPoints is a Cloud-Function-maintained aggregate; clients may seed
+      // it to 0 on create and may only edit their own profile fields. groupIds
+      // is written exclusively by createGroup / joinGroup (Cloud Functions).
+      allow create: if isSelf(userId)
+                     && request.resource.data.totalPoints == 0;
+      allow update: if isSelf(userId)
+                     && request.resource.data.diff(resource.data).affectedKeys()
+                          .hasOnly(['displayName', 'handle', 'photoURL']);
       allow delete: if false;
     }
 
     /* ── groups ──────────────────────────────────────────────────── */
     match /groups/{gid} {
       allow read:   if isMember(gid);
-      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update: if isOwner(gid) || isAdmin(gid);
+      // Group creation goes through the createGroup Cloud Function only, which
+      // also provisions the owner's members doc + leaderboard atomically and
+      // allocates a unique invite code. A direct client create would otherwise
+      // let users spam orphan groups and squat invite codes.
+      allow create: if false;
+      // Owners/admins may edit display settings only. ownerId, inviteCode,
+      // memberCount, etc. are off-limits — otherwise an admin could rewrite
+      // ownerId and take over the group.
+      allow update: if (isOwner(gid) || isAdmin(gid))
+                     && request.resource.data.diff(resource.data).affectedKeys()
+                          .hasOnly(['name', 'emoji', 'defaultExpiryDays']);
       allow delete: if isOwner(gid);
 
       /* members subcollection */
@@ -62,9 +81,31 @@ service cloud.firestore {
       /* bounties */
       match /bounties/{bid} {
         allow read:   if isMember(gid);
+        // Lock the field set and validate every client-settable value. price
+        // feeds points / leaderboard / IOU amounts server-side, so it must be
+        // a bounded positive integer — never client-forged, negative, or
+        // non-numeric. createdAt must be the server time (blocks feed-pinning
+        // via a forged future timestamp); expiresAt must be a timestamp.
         allow create: if isMember(gid)
+                       && request.resource.data.keys().hasOnly(
+                            ['title', 'description', 'price', 'currency',
+                             'state', 'posterId', 'claimantId',
+                             'expiresAt', 'createdAt'])
                        && request.resource.data.posterId == request.auth.uid
-                       && request.resource.data.state == 'available';
+                       && request.resource.data.state == 'available'
+                       && request.resource.data.claimantId == null
+                       && request.resource.data.price is int
+                       && request.resource.data.price >= 1
+                       && request.resource.data.price <= 100000
+                       && request.resource.data.title is string
+                       && request.resource.data.title.size() > 0
+                       && request.resource.data.title.size() <= 80
+                       && request.resource.data.description is string
+                       && request.resource.data.description.size() <= 1000
+                       && request.resource.data.currency is string
+                       && request.resource.data.currency.size() <= 8
+                       && request.resource.data.expiresAt is timestamp
+                       && request.resource.data.createdAt == request.time;
         // State transitions go through Cloud Functions only.
         allow update: if false;
         allow delete: if resource.data.posterId == request.auth.uid
@@ -98,6 +139,11 @@ service cloud.firestore {
       allow read, update, delete: if isSelf(userId);
       // Creation by Cloud Functions only.
       allow create: if false;
+    }
+
+    /* ── rate-limit counters — Cloud Functions only ──────────────── */
+    match /rateLimits/{userId} {
+      allow read, write: if false;
     }
   }
 }
