@@ -23,24 +23,16 @@ function ensureApp(): FirebaseApp {
 
 /**
  * Initialize Firebase App Check so the backend can reject calls that don't
- * originate from a genuine instance of this app (the Cloud Functions enforce
- * App Check in production). Skipped against the emulators, which can't attest
- * App Check, and when no site key is configured yet.
+ * originate from a genuine instance of this app. Opt-in: only runs when an
+ * appCheckSiteKey is configured. Skipped against the emulators (App Check
+ * can't be attested locally). The Cloud Functions only enforce App Check when
+ * their ENFORCE_APP_CHECK flag is set, so leaving the key blank is safe.
  */
 function ensureAppCheck(app: FirebaseApp): void {
   if (_appCheckInit) return;
   _appCheckInit = true;
   const env = environment as { useEmulators?: boolean; appCheckSiteKey?: string };
-  if (env.useEmulators) return;
-  if (!env.appCheckSiteKey) {
-    if (environment.production) {
-      console.warn(
-        '[firebase] App Check site key is not set — callables will fail in ' +
-          'production. Set environment.appCheckSiteKey.',
-      );
-    }
-    return;
-  }
+  if (env.useEmulators || !env.appCheckSiteKey) return;
   initializeAppCheck(app, {
     provider: new ReCaptchaEnterpriseProvider(env.appCheckSiteKey),
     isTokenAutoRefreshEnabled: true,

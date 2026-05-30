@@ -32,13 +32,15 @@ const db = admin.firestore();
 
 setGlobalOptions({maxInstances: 10, region: "australia-southeast1"});
 
-// App Check is enforced on every callable in production so a leaked (public)
-// API key alone can't drive the backend. IMPORTANT: this must ship together
-// with client-side App Check init (initializeAppCheck) — otherwise every
-// production call fails with "unauthenticated". App Check can't be attested
-// against the emulator, so enforcement is disabled there (the emulator sets
-// FUNCTIONS_EMULATOR=true) to keep the integration/e2e suites runnable.
-const ENFORCE_APP_CHECK = process.env.FUNCTIONS_EMULATOR !== "true";
+// App Check enforcement on the callables. OFF by default so the app works
+// without a reCAPTCHA/App Check provider configured. To turn it on later:
+//   1. Configure client App Check (initializeAppCheck with a real site key).
+//   2. Set ENFORCE_APP_CHECK=true (e.g. in functions/.env) and redeploy.
+// Never enforced under the emulator — App Check can't be attested locally
+// (the emulator sets FUNCTIONS_EMULATOR=true), which would break the suites.
+const ENFORCE_APP_CHECK =
+  process.env.FUNCTIONS_EMULATOR !== "true" &&
+  process.env.ENFORCE_APP_CHECK === "true";
 const CALLABLE_OPTS = {enforceAppCheck: ENFORCE_APP_CHECK};
 
 const MAX_LEADERBOARD_ENTRIES = 100;
