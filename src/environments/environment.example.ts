@@ -12,4 +12,6 @@ export const environment = {
   },
   // reCAPTCHA Enterprise site key for App Check (required in production).
   appCheckSiteKey: '',
+  // Stripe publishable key (pk_test_… / pk_live_…). Safe for client code.
+  stripePublishableKey: '',
 };

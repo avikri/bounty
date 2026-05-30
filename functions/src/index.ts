@@ -12,10 +12,8 @@
  * machine, so a transient failure shouldn't roll back the resolution.
  */
 
-import {setGlobalOptions} from "firebase-functions";
-import {HttpsError, onCall, CallableRequest} from "firebase-functions/v2/https";
+import {HttpsError, onCall} from "firebase-functions/v2/https";
 import {onSchedule} from "firebase-functions/v2/scheduler";
-import * as admin from "firebase-admin";
 // Pull Timestamp/FieldValue from the modular entry point rather than off
 // `admin.firestore.*`. The Functions emulator wraps `admin.firestore()` to
 // auto-connect to the local emulator, and that wrapper drops the static
@@ -26,22 +24,22 @@ import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 import {randomInt} from "node:crypto";
 import {runBountyExpiry} from "./expiry";
-
-admin.initializeApp();
-const db = admin.firestore();
-
-setGlobalOptions({maxInstances: 10, region: "australia-southeast1"});
-
-// App Check enforcement on the callables. OFF by default so the app works
-// without a reCAPTCHA/App Check provider configured. To turn it on later:
-//   1. Configure client App Check (initializeAppCheck with a real site key).
-//   2. Set ENFORCE_APP_CHECK=true (e.g. in functions/.env) and redeploy.
-// Never enforced under the emulator — App Check can't be attested locally
-// (the emulator sets FUNCTIONS_EMULATOR=true), which would break the suites.
-const ENFORCE_APP_CHECK =
-  process.env.FUNCTIONS_EMULATOR !== "true" &&
-  process.env.ENFORCE_APP_CHECK === "true";
-const CALLABLE_OPTS = {enforceAppCheck: ENFORCE_APP_CHECK};
+// `./shared` owns admin.initializeApp() + setGlobalOptions and the auth /
+// rate-limit / inbox helpers shared with the Stripe functions. Import it
+// first so process setup runs before any function below is defined.
+import {
+  db,
+  CALLABLE_OPTS,
+  requireAuth,
+  requireString,
+  enforceRateLimit,
+  writeInbox,
+  memberName,
+  userName,
+} from "./shared";
+// Re-export the Stripe Connect payment functions so the Functions runtime
+// discovers them from the single index entry point.
+export * from "./stripe";
 
 const MAX_LEADERBOARD_ENTRIES = 100;
 const MAX_PROOF_NOTE_CHARS = 500;
@@ -87,78 +85,11 @@ interface LeaderboardEntry {
 
 /* ── helpers ──────────────────────────────────────────────────────── */
 
-function requireAuth(req: CallableRequest<unknown>): string {
-  const uid = req.auth?.uid;
-  if (!uid) throw new HttpsError("unauthenticated", "Sign-in required.");
-  return uid;
-}
-
 async function requireMembership(groupId: string, uid: string): Promise<void> {
   const memberSnap = await db.doc(`groups/${groupId}/members/${uid}`).get();
   if (!memberSnap.exists) {
     throw new HttpsError("permission-denied", "Not a member of this group.");
   }
-}
-
-function requireString(value: unknown, name: string): string {
-  if (typeof value !== "string" || value.length === 0) {
-    throw new HttpsError("invalid-argument", `${name} required.`);
-  }
-  return value;
-}
-
-/* ── rate limiting ────────────────────────────────────────────────── */
-
-interface RateRule { max: number; windowSec: number; }
-
-// Per-user fixed-window caps — generous for real use, tight enough to stop
-// tight-loop abuse / cost amplification (esp. unbounded group creation and
-// invite-code brute-forcing). Counters live in rateLimits/{uid}, which is
-// Cloud-Function-only (denied to clients by firestore.rules).
-const RATE_RULES: Record<string, RateRule> = {
-  createGroup: {max: 10, windowSec: 3600},
-  joinGroup: {max: 20, windowSec: 3600},
-  regenerateInviteCode: {max: 20, windowSec: 3600},
-  claimBounty: {max: 60, windowSec: 3600},
-  submitProof: {max: 60, windowSec: 3600},
-  approveBounty: {max: 120, windowSec: 3600},
-  rejectBounty: {max: 120, windowSec: 3600},
-  markIouPaid: {max: 120, windowSec: 3600},
-};
-
-/**
- * Fixed-window per-user rate limit. Throws `resource-exhausted` once a user
- * exceeds the configured number of calls for `action` within its window.
- */
-async function enforceRateLimit(uid: string, action: string): Promise<void> {
-  const rule = RATE_RULES[action];
-  if (!rule) return;
-  const ref = db.doc(`rateLimits/${uid}`);
-  const nowMs = Date.now();
-  const windowMs = rule.windowSec * 1000;
-
-  await db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const all = (snap.exists ? snap.data() : {}) as
-      Record<string, { count: number; windowStart: number } | undefined>;
-    const bucket = all[action];
-
-    if (!bucket || nowMs - bucket.windowStart >= windowMs) {
-      tx.set(ref, {[action]: {count: 1, windowStart: nowMs}}, {merge: true});
-      return;
-    }
-    if (bucket.count >= rule.max) {
-      throw new HttpsError(
-          "resource-exhausted",
-          "Too many requests — please slow down and try again later.",
-      );
-    }
-    tx.set(
-        ref,
-        {[action]: {count: bucket.count + 1, windowStart: bucket.windowStart}},
-        {merge: true},
-    );
-  });
 }
 
 /** Insert or replace an entry, then sort by points desc and cap. */
@@ -170,41 +101,6 @@ function upsertLeaderboardEntry(
   next.push(entry);
   next.sort((a, b) => (b.points ?? 0) - (a.points ?? 0));
   return next.slice(0, MAX_LEADERBOARD_ENTRIES);
-}
-
-async function writeInbox(
-    userId: string,
-    payload: Record<string, unknown>,
-): Promise<void> {
-  try {
-    await db.collection(`notifications/${userId}/inbox`).add({
-      ...payload,
-      createdAt: Timestamp.now(),
-      read: false,
-    });
-  } catch (e) {
-    logger.warn("inbox write failed", {userId, error: String(e)});
-  }
-}
-
-/** Best-effort lookup of a member's cached display name within a group. */
-async function memberName(groupId: string, uid: string): Promise<string> {
-  try {
-    const snap = await db.doc(`groups/${groupId}/members/${uid}`).get();
-    return (snap.data()?.displayName as string | undefined) || "Someone";
-  } catch {
-    return "Someone";
-  }
-}
-
-/** Best-effort lookup of a top-level user's display name. */
-async function userName(uid: string): Promise<string> {
-  try {
-    const snap = await db.doc(`users/${uid}`).get();
-    return (snap.data()?.displayName as string | undefined) || "Someone";
-  } catch {
-    return "Someone";
-  }
 }
 
 /* ── claimBounty ──────────────────────────────────────────────────── */

@@ -65,7 +65,7 @@ export interface MemberDoc {
 }
 
 export interface BountyDoc {
-  title: string; description: string; price: number;
+  title: string; description: string; price: number; currency?: string;
   state: BountyState; posterId: string; claimantId?: string | null;
   proof?: { urls: string[]; note: string };
   expiresAt: Timestamp; createdAt: Timestamp; resolvedAt?: Timestamp;
@@ -77,6 +77,12 @@ export interface IouDoc {
   amount: number; bountyId: string;
   status: IOU['status']; createdAt: Timestamp;
   settledAt?: Timestamp;
+  currency?: string;
+  paymentMethod?: IOU['paymentMethod'];
+  stripePaymentIntentId?: string;
+  stripeStatus?: string;
+  creditorPayable?: boolean;
+  awaitingCreditorOnboarding?: boolean;
 }
 
 export interface NotificationDoc {
@@ -132,6 +138,7 @@ export function mapBounty(id: string, groupId: string, d: BountyDoc): Bounty {
   return {
     id, groupId,
     title: d.title, description: d.description, price: d.price,
+    currency: d.currency,
     state: d.state, posterId: d.posterId, claimantId: d.claimantId ?? null,
     proof: d.proof,
     expiresAt: toDate(d.expiresAt),

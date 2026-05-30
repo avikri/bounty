@@ -8,7 +8,9 @@ export default defineConfig({
     // Integration specs share a single emulator instance and clear data
     // between tests, so files must not run concurrently.
     fileParallelism: false,
-    testTimeout: 30_000,
+    // The emulator can be slow under load on Windows; keep per-test headroom
+    // generous so cold starts don't cause spurious timeouts (the work is fast).
+    testTimeout: 60_000,
     hookTimeout: 60_000,
   },
 });

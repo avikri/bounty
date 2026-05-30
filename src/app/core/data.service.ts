@@ -26,6 +26,8 @@ import {
   AppNotification,
   Bounty,
   BountyState,
+  ConnectAccountStatus,
+  CreateIouPaymentIntentResult,
   Group,
   IOU,
   LeaderboardEntry,
@@ -67,12 +69,20 @@ export class DataService {
   private readonly _bounties = signal<Bounty[]>([]);
   private readonly _ious     = signal<IOU[]>([]);
   private readonly _notifications = signal<AppNotification[]>([]);
+  /** Runtime card-payments kill-switch (config/payments). Default OFF. */
+  private readonly _cardPaymentsEnabled = signal(false);
 
   readonly users    = this._users.asReadonly();
   readonly groups   = this._groups.asReadonly();
   readonly bounties = this._bounties.asReadonly();
   readonly ious     = this._ious.asReadonly();
   readonly notifications = this._notifications.asReadonly();
+  /**
+   * Whether the card-payment path is turned on server-side. Driven by a live
+   * listener on config/payments, so flipping the flag shows/hides the card
+   * option immediately — no redeploy, no reload. The cash path ignores this.
+   */
+  readonly cardPaymentsEnabled = this._cardPaymentsEnabled.asReadonly();
   readonly unreadCount = computed(() => this._notifications().filter((n) => !n.read).length);
 
   get currentUserId(): string {
@@ -96,6 +106,18 @@ export class DataService {
       this.teardown();
       if (uid) this.bootstrap(uid);
     }, { allowSignalWrites: true });
+
+    // Always-on listener for the global payments kill-switch — independent of
+    // auth (config/payments is publicly readable) so the card path tracks the
+    // flag live. Missing doc / read error → OFF (card path stays hidden).
+    onSnapshot(
+      doc(this.firestore, 'config', 'payments'),
+      (snap) => this._cardPaymentsEnabled.set(
+        (snap.data() as { stripePaymentsEnabled?: boolean } | undefined)
+          ?.stripePaymentsEnabled === true,
+      ),
+      () => this._cardPaymentsEnabled.set(false),
+    );
   }
 
   private bootstrap(uid: string): void {
@@ -435,7 +457,7 @@ export class DataService {
       title: input.title,
       description: input.description,
       price: input.price,
-      currency: input.currency ?? 'USD',
+      currency: input.currency ?? 'NZD',
       state: 'available' as BountyState,
       posterId: uid,
       claimantId: null,
@@ -532,6 +554,40 @@ export class DataService {
 
   markIouPaid(iouId: string): Promise<{ settled: boolean }> {
     return this.callableRaw<{ iouId: string }, { settled: boolean }>('markIouPaid', { iouId });
+  }
+
+  /* ── Stripe card-payment callables ───────────────────────────────── */
+
+  /**
+   * Ask the backend to build a destination-charge PaymentIntent so the debtor
+   * can settle this IOU by card. Returns either an `ok` result carrying the
+   * per-payment `clientSecret` to confirm with Stripe.js, or
+   * `creditor_not_onboarded` — in which case the backend has already flagged the
+   * IOU as awaiting onboarding and notified the creditor (the UI shows a waiting
+   * state and the cash path stays available).
+   */
+  createIouPaymentIntent(iouId: string): Promise<CreateIouPaymentIntentResult> {
+    return this.callableRaw<{ iouId: string }, CreateIouPaymentIntentResult>(
+      'createIouPaymentIntent', { iouId },
+    );
+  }
+
+  /**
+   * Lazily create the caller's NZ Express connected account (if absent) and
+   * return a fresh Stripe-hosted onboarding link. Called on demand — only when
+   * a card payment is actually pending on one of the creditor's IOUs.
+   */
+  createConnectAccountAndOnboardingLink(): Promise<{ url: string; accountId: string }> {
+    return this.callableRaw<Record<string, never>, { url: string; accountId: string }>(
+      'createConnectAccountAndOnboardingLink', {},
+    );
+  }
+
+  /** Refresh and report whether the caller's connected account can receive funds. */
+  getConnectAccountStatus(): Promise<ConnectAccountStatus> {
+    return this.callableRaw<Record<string, never>, ConnectAccountStatus>(
+      'getConnectAccountStatus', {},
+    );
   }
 
   /** Mark a single notification read (rules allow self-update of `read`). */

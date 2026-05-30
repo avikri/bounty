@@ -36,9 +36,16 @@ service cloud.firestore {
       allow read: if isSelf(userId);
       // totalPoints is a Cloud-Function-maintained aggregate; clients may seed
       // it to 0 on create and may only edit their own profile fields. groupIds
-      // is written exclusively by createGroup / joinGroup (Cloud Functions).
+      // is written exclusively by createGroup / joinGroup (Cloud Functions), so
+      // it must be created empty. The key allowlist stops a client from seeding
+      // server-managed/sensitive fields (e.g. stripeConnectAccountId,
+      // stripePayable) that gate where real money is routed.
       allow create: if isSelf(userId)
-                     && request.resource.data.totalPoints == 0;
+                     && request.resource.data.totalPoints == 0
+                     && request.resource.data.groupIds == []
+                     && request.resource.data.keys().hasOnly([
+                          'uid', 'displayName', 'handle', 'photoURL',
+                          'groupIds', 'totalPoints', 'createdAt']);
       allow update: if isSelf(userId)
                      && request.resource.data.diff(resource.data).affectedKeys()
                           .hasOnly(['displayName', 'handle', 'photoURL']);
@@ -127,10 +134,14 @@ service cloud.firestore {
 
     /* ── IOUs ────────────────────────────────────────────────────── */
     match /ious/{iouId} {
+      // Both parties read the whole doc, including the Stripe fields
+      // (paymentMethod, stripePaymentIntentId, stripeStatus, creditorPayable,
+      // awaitingCreditorOnboarding) that Cloud Functions denormalize onto it.
       allow read: if isSignedIn()
                    && (resource.data.debtorId == request.auth.uid
                        || resource.data.creditorId == request.auth.uid);
-      // Creation/settlement happen via Cloud Functions.
+      // Creation/settlement (manual and Stripe-driven) happen via Cloud
+      // Functions only. Stripe settlement lives in the signed webhook.
       allow write: if false;
     }
 
@@ -143,6 +154,12 @@ service cloud.firestore {
 
     /* ── rate-limit counters — Cloud Functions only ──────────────── */
     match /rateLimits/{userId} {
+      allow read, write: if false;
+    }
+
+    /* ── Stripe webhook idempotency ledger — Cloud Functions only ─── */
+    // One doc per processed Stripe event id, so redelivered events are no-ops.
+    match /stripeEvents/{eventId} {
       allow read, write: if false;
     }
   }

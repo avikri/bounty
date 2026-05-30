@@ -15,4 +15,8 @@ export const environment = {
     appId:             '1:1018038143311:web:d1b7cc743f766a63009d3a',
   },
   useEmulators: true,
+  // No real Stripe in E2E — the card flow is exercised manually in test mode.
+  // Left blank so StripeService.isConfigured() reports false and the UI hides
+  // card-payment affordances under the emulator build.
+  stripePublishableKey: '',
 };
