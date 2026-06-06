@@ -51,7 +51,7 @@ import { Bounty, Group } from '../../core/models';
                 <div class="meat">
                   <div class="title-row">
                     <div class="title">{{ b.title }}</div>
-                    <div class="price">\${{ b.price }}</div>
+                    <div class="price">{{ reward(b) }}</div>
                   </div>
                   @if (claimantOf(b); as c) {
                     <div class="who">
@@ -82,8 +82,8 @@ import { Bounty, Group } from '../../core/models';
               </div>
             }
             <div class="payout-hint">
-              Approve → {{ claimantOf(b)?.handle }} <strong>+{{ b.price }} pts</strong>, you owe {{ claimantOf(b)?.handle }} <strong>\${{ b.price }}</strong>.<br />
-              Reject → {{ claimantOf(b)?.handle }} <strong>−{{ b.price }} pts</strong>.
+              Approve → {{ claimantOf(b)?.handle }} <strong>+{{ b.points }} pts</strong>, you owe {{ claimantOf(b)?.handle }} <strong>{{ reward(b) }}</strong>.<br />
+              Reject → {{ claimantOf(b)?.handle }} <strong>−{{ b.points }} pts</strong>.
             </div>
             <div class="action-row">
               <button class="btn danger" (click)="openReject(b.id)" [disabled]="busy()" data-testid="reject">Reject</button>
@@ -281,6 +281,11 @@ export class ReviewQueuePage {
 
   claimantOf(b: Bounty) {
     return b.claimantId ? this.data.userById(b.claimantId) : undefined;
+  }
+
+  /** Reward label: `$amount` for cash, the freeform text for custom. */
+  reward(b: Bounty): string {
+    return b.rewardType === 'custom' ? b.rewardText ?? '—' : `$${b.price}`;
   }
 
   /** First image URL in the proof, if any — used for the row thumbnail. */

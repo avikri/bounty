@@ -4,6 +4,7 @@ import {
   hashCode,
   initialsOf,
   mapBounty,
+  mapComment,
   mapGroup,
   mapIou,
   mapMember,
@@ -11,6 +12,7 @@ import {
   pickVariant,
   toDate,
   type BountyDoc,
+  type CommentDoc,
   type GroupDoc,
   type IouDoc,
   type MemberDoc,
@@ -187,6 +189,36 @@ describe('mapBounty', () => {
     expect(b.resolvedAt).toBeUndefined();
   });
 
+  it('defaults a legacy doc (no rewardType) to cash with points = price', () => {
+    const b = mapBounty('b1', 'g1', base);
+    expect(b.rewardType).toBe('cash');
+    expect(b.price).toBe(5);
+    expect(b.points).toBe(5);
+    expect(b.rewardText).toBeUndefined();
+  });
+
+  it('maps a custom reward (text + explicit points, no price)', () => {
+    const b = mapBounty('b1', 'g1', {
+      ...base,
+      price: undefined,
+      rewardType: 'custom',
+      rewardText: '3 beers',
+      points: 40,
+    } as BountyDoc);
+    expect(b.rewardType).toBe('custom');
+    expect(b.rewardText).toBe('3 beers');
+    expect(b.points).toBe(40);
+    expect(b.price).toBe(0);
+  });
+
+  it('keeps an explicit cash points value', () => {
+    const b = mapBounty('b1', 'g1', {
+      ...base, rewardType: 'cash', price: 10, points: 10,
+    } as BountyDoc);
+    expect(b.rewardType).toBe('cash');
+    expect(b.points).toBe(10);
+  });
+
   it('maps claimant, proof, resolvedAt and rejectionReason when present', () => {
     const resolved = new Date('2025-01-05T00:00:00Z');
     const b = mapBounty('b1', 'g1', {
@@ -281,6 +313,37 @@ describe('mapNotification', () => {
       createdAt,
     } as NotificationDoc);
     expect(n.read).toBe(true);
+  });
+});
+
+describe('mapComment', () => {
+  const created = new Date('2025-04-01T00:00:00Z');
+
+  it('maps fields and converts createdAt to a date', () => {
+    const c = mapComment('c1', {
+      authorUid: 'u1',
+      authorDisplayName: 'Mel Member',
+      text: 'first!',
+      createdAt: ts(created) as never,
+    });
+    expect(c.id).toBe('c1');
+    expect(c.authorUid).toBe('u1');
+    expect(c.authorDisplayName).toBe('Mel Member');
+    expect(c.text).toBe('first!');
+    expect(c.createdAt).toEqual(created);
+    expect(c.editedAt).toBeUndefined();
+  });
+
+  it('converts editedAt when present', () => {
+    const edited = new Date('2025-04-02T00:00:00Z');
+    const c = mapComment('c1', {
+      authorUid: 'u1',
+      authorDisplayName: 'Mel Member',
+      text: 'edited',
+      createdAt: ts(created) as never,
+      editedAt: ts(edited) as never,
+    } as CommentDoc);
+    expect(c.editedAt).toEqual(edited);
   });
 });
 

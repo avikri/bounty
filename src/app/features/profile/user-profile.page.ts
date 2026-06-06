@@ -25,6 +25,8 @@ interface DisplayIou {
   awaitingOnboarding: boolean;
   /** Settled, and the settlement came through a card payment. */
   settledByCard: boolean;
+  /** Custom (non-cash) reward IOU — manual-settle only, never card-payable. */
+  isCustom: boolean;
 }
 
 /** A pending card payment confirmation in flight, hosted by the dialog. */
@@ -111,7 +113,7 @@ interface PayDialogState {
                 </div>
               </div>
               <div class="amount" [class.pos]="!row.iOweThem" [class.neg]="row.iOweThem">
-                {{ row.iOweThem ? '−$' + row.iou.amount : '+$' + row.iou.amount }}
+                {{ iouLabel(row) }}
               </div>
               @if (isMe()) {
                 <div class="row-actions">
@@ -128,9 +130,9 @@ interface PayDialogState {
                             (click)="markPaid(row.iou.id)"
                             [disabled]="busyId() === row.iou.id"
                             data-testid="iou-action">
-                      {{ busyId() === row.iou.id ? '…' : (row.iOweThem ? 'Mark as paid (cash)' : 'Confirm received') }}
+                      {{ busyId() === row.iou.id ? '…' : (row.iOweThem ? (row.isCustom ? 'Mark as paid' : 'Mark as paid (cash)') : 'Confirm received') }}
                     </button>
-                    @if (row.iOweThem && canCard() && !row.awaitingOnboarding) {
+                    @if (row.iOweThem && canCard() && !row.awaitingOnboarding && !row.isCustom) {
                       <button class="btn sm"
                               (click)="payWithCard(row)"
                               [disabled]="busyId() === row.iou.id"
@@ -166,7 +168,7 @@ interface PayDialogState {
                     {{ row.iou.settledAt ? (row.iou.settledAt | date) : '' }}
                   </div>
                 </div>
-                <div class="amount muted">\${{ row.iou.amount }}</div>
+                <div class="amount muted">{{ row.isCustom ? (row.iou.rewardText ?? '—') : '$' + row.iou.amount }}</div>
               </div>
             }
           </div>
@@ -178,7 +180,7 @@ interface PayDialogState {
             <div class="title">{{ b.title }}</div>
             <app-state-badge
               [bountyState]="b.state"
-              [overrideLabel]="b.state === 'successful' ? '+' + b.price : '−' + b.price"
+              [overrideLabel]="(b.state === 'successful' ? '+' : '−') + b.points + ' pts'"
             />
           </div>
         } @empty {
@@ -397,9 +399,16 @@ export class UserProfilePage {
         cardPending,
         awaitingOnboarding,
         settledByCard: settled && iou.paymentMethod === 'stripe',
+        isCustom: iou.rewardType === 'custom',
       };
     });
   });
+
+  /** Signed reward label for an IOU row: `±$amount` for cash, the text for custom. */
+  protected iouLabel(row: DisplayIou): string {
+    const sign = row.iOweThem ? '−' : '+';
+    return row.isCustom ? `${sign}${row.iou.rewardText ?? '—'}` : `${sign}$${row.iou.amount}`;
+  }
 
   /**
    * True when someone is waiting to pay me by card but I haven't set up payouts.

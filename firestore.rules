@@ -28,6 +28,42 @@ service cloud.firestore {
         get(/databases/$(database)/documents/groups/$(gid)/members/$(request.auth.uid)).data.role in ['owner', 'admin'];
     }
 
+    /* ── bounty reward validation ─────────────────────────────────── */
+    // A bounty reward is either cash (a bounded integer dollar price, points
+    // pinned to that price, no rewardText) or custom (a 1–10 char rewardText,
+    // poster-set points 1–1000, no real price). Absent rewardType is treated as
+    // cash so pre-feature creates stay valid. points feeds the leaderboard, so
+    // it is always validated as a bounded int; price still feeds money/IOUs.
+
+    function isCashReward(d) {
+      return !('rewardType' in d) || d.rewardType == 'cash';
+    }
+
+    function cashRewardValid(d) {
+      return d.price is int
+        && d.price >= 1
+        && d.price <= 100000
+        && !('rewardText' in d)
+        // points, if present, must equal the dollar price (preserves 1:1).
+        && (!('points' in d) || (d.points is int && d.points == d.price));
+    }
+
+    function customRewardValid(d) {
+      return d.rewardType == 'custom'
+        && d.rewardText is string
+        && d.rewardText.size() >= 1
+        && d.rewardText.size() <= 10
+        && d.points is int
+        && d.points >= 1
+        && d.points <= 1000
+        // No real money on a custom bounty: price absent or explicitly 0.
+        && (!('price' in d) || d.price == 0);
+    }
+
+    function bountyRewardValid(d) {
+      return (isCashReward(d) && cashRewardValid(d)) || customRewardValid(d);
+    }
+
     /* ── users ───────────────────────────────────────────────────── */
     match /users/{userId} {
       // Self-only read: the client only ever reads its own user doc; all
@@ -96,14 +132,16 @@ service cloud.firestore {
         allow create: if isMember(gid)
                        && request.resource.data.keys().hasOnly(
                             ['title', 'description', 'price', 'currency',
+                             'rewardType', 'rewardText', 'points',
                              'state', 'posterId', 'claimantId',
                              'expiresAt', 'createdAt'])
                        && request.resource.data.posterId == request.auth.uid
                        && request.resource.data.state == 'available'
                        && request.resource.data.claimantId == null
-                       && request.resource.data.price is int
-                       && request.resource.data.price >= 1
-                       && request.resource.data.price <= 100000
+                       // Reward shape: cash (bounded int price) XOR custom
+                       // (rewardText + bounded points). Rejects mixed combos
+                       // like custom-with-price or cash-without-price.
+                       && bountyRewardValid(request.resource.data)
                        && request.resource.data.title is string
                        && request.resource.data.title.size() > 0
                        && request.resource.data.title.size() <= 80
@@ -122,6 +160,50 @@ service cloud.firestore {
         match /activity/{eventId} {
           allow read: if isMember(gid);
           allow write: if false;
+        }
+
+        /* pooled contributions — server-write-only, like /ious. Members read
+           the contributor list + amounts; the running total is raised only by
+           the contributeToBounty callable (admin SDK), never a client write. */
+        match /contributions/{contributorId} {
+          allow read:  if isMember(gid);
+          allow write: if false;
+        }
+
+        /* comments — direct client writes, governed strictly (mirrors the
+           bounty create allowlist above). Comments are non-load-bearing social
+           content, so they take the direct-write path rather than a callable;
+           the cost is rules can't rate-limit (acceptable for a friend group).
+           authorDisplayName is denormalized at write time. */
+        match /comments/{commentId} {
+          allow read: if isMember(gid);
+          // Lock the field set, pin the author to the caller, bound text length,
+          // and force createdAt to the server time (no feed-pinning a comment).
+          allow create: if isMember(gid)
+                         && request.resource.data.authorUid == request.auth.uid
+                         && request.resource.data.keys().hasOnly(
+                              ['authorUid', 'authorDisplayName', 'text', 'createdAt'])
+                         && request.resource.data.authorDisplayName is string
+                         && request.resource.data.authorDisplayName.size() > 0
+                         && request.resource.data.authorDisplayName.size() <= 80
+                         && request.resource.data.text is string
+                         && request.resource.data.text.size() >= 1
+                         && request.resource.data.text.size() <= 500
+                         && request.resource.data.createdAt == request.time;
+          // Author may edit only their own comment, changing just text + the
+          // editedAt stamp (which must be the server time).
+          allow update: if isSelf(resource.data.authorUid)
+                         && request.resource.data.diff(resource.data).affectedKeys()
+                              .hasOnly(['text', 'editedAt'])
+                         && request.resource.data.text is string
+                         && request.resource.data.text.size() >= 1
+                         && request.resource.data.text.size() <= 500
+                         && request.resource.data.editedAt == request.time;
+          // Light moderation: the author, the bounty poster, or the group owner.
+          allow delete: if isSelf(resource.data.authorUid)
+                         || isOwner(gid)
+                         || get(/databases/$(database)/documents/groups/$(gid)/bounties/$(bid))
+                              .data.posterId == request.auth.uid;
         }
       }
 

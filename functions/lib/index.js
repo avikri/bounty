@@ -49,7 +49,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.markIouPaid = exports.regenerateInviteCode = exports.joinGroup = exports.createGroup = exports.onBountyExpiry = exports.rejectBounty = exports.approveBounty = exports.submitProof = exports.claimBounty = void 0;
+exports.markIouPaid = exports.regenerateInviteCode = exports.joinGroup = exports.createGroup = exports.onBountyExpiry = exports.rejectBounty = exports.approveBounty = exports.contributeToBounty = exports.submitProof = exports.claimBounty = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 // Pull Timestamp/FieldValue from the modular entry point rather than off
@@ -72,7 +72,23 @@ __exportStar(require("./stripe"), exports);
 const MAX_LEADERBOARD_ENTRIES = 100;
 const MAX_PROOF_NOTE_CHARS = 500;
 const MAX_REJECTION_REASON_CHARS = 500;
+// Per-contribution money bounds, in whole NZD dollars. These mirror the cash
+// `price` bounds enforced for bounty creation in firestore.rules (1..100000) so
+// a contribution can't push a bounty total past what the create rule would have
+// allowed for a single stake.
+const MIN_CONTRIBUTION = 1;
+const MAX_CONTRIBUTION = 100000;
 /* ── helpers ──────────────────────────────────────────────────────── */
+/**
+ * Leaderboard points a bounty awards on approval / docks on rejection.
+ * Decoupled from the reward: cash bounties pin `points` to the dollar price,
+ * custom bounties carry a poster-set value. Falls back to `price` for
+ * pre-feature docs that predate the `points` field.
+ */
+function bountyPoints(b) {
+    var _a, _b;
+    return (_b = (_a = b.points) !== null && _a !== void 0 ? _a : b.price) !== null && _b !== void 0 ? _b : 0;
+}
 async function requireMembership(groupId, uid) {
     const memberSnap = await shared_1.db.doc(`groups/${groupId}/members/${uid}`).get();
     if (!memberSnap.exists) {
@@ -191,6 +207,115 @@ exports.submitProof = (0, https_1.onCall)(shared_1.CALLABLE_OPTS, async (req) =>
     });
     return { ok: true };
 });
+/* ── contributeToBounty ───────────────────────────────────────────── */
+/**
+ * Pool money onto an `available` **cash** bounty, raising its total. Any group
+ * member — including the poster again — may add to the pot before the bounty is
+ * claimed; once claimed (or otherwise resolved) this rejects. Each contribution
+ * is recorded per-contributor so that on approval every contributor owes the
+ * claimant exactly their own share (see approveBounty).
+ *
+ * The bounty total is the live `price` field (whole NZD dollars), kept equal to
+ * the sum of the contribution docs and with `points` pinned to it (1pt = NZ$1).
+ * The poster's original stake is implicit in `price` until the first pool, at
+ * which point it's materialised as the poster's own contribution doc so the
+ * "total === sum(contributions)" invariant holds from then on.
+ */
+exports.contributeToBounty = (0, https_1.onCall)(shared_1.CALLABLE_OPTS, async (req) => {
+    var _a;
+    const uid = (0, shared_1.requireAuth)(req);
+    await (0, shared_1.enforceRateLimit)(uid, "contributeToBounty");
+    const data = ((_a = req.data) !== null && _a !== void 0 ? _a : {});
+    const groupId = (0, shared_1.requireString)(data.groupId, "groupId");
+    const bountyId = (0, shared_1.requireString)(data.bountyId, "bountyId");
+    const amount = data.amount;
+    if (typeof amount !== "number" || !Number.isInteger(amount) ||
+        amount < MIN_CONTRIBUTION || amount > MAX_CONTRIBUTION) {
+        throw new https_1.HttpsError("invalid-argument", `amount must be a whole dollar value between ${MIN_CONTRIBUTION} ` +
+            `and ${MAX_CONTRIBUTION}.`);
+    }
+    // Caller must be a member of the bounty's group (mirrors the other callables).
+    await requireMembership(groupId, uid);
+    const bountyRef = shared_1.db.doc(`groups/${groupId}/bounties/${bountyId}`);
+    const activityRef = shared_1.db
+        .collection(`groups/${groupId}/bounties/${bountyId}/activity`)
+        .doc();
+    const result = await shared_1.db.runTransaction(async (tx) => {
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+        const bountySnap = await tx.get(bountyRef);
+        if (!bountySnap.exists) {
+            throw new https_1.HttpsError("not-found", "Bounty not found.");
+        }
+        const bounty = bountySnap.data();
+        // Pooling is cash-only: a custom reward ("3 beers") has no divisible amount.
+        if (bounty.rewardType === "custom") {
+            throw new https_1.HttpsError("failed-precondition", "Only cash bounties can be added to.");
+        }
+        // Money only moves at approval, so pooling is closed once a bounty leaves
+        // `available` (a claim, resolution, or expiry all end the window).
+        if (bounty.state !== "available") {
+            throw new https_1.HttpsError("failed-precondition", `Cannot add to a bounty in state '${bounty.state}'.`);
+        }
+        const posterId = bounty.posterId;
+        const total = (_a = bounty.price) !== null && _a !== void 0 ? _a : 0;
+        const posterRef = bountyRef.collection("contributions").doc(posterId);
+        const callerRef = bountyRef.collection("contributions").doc(uid);
+        const callerMemberRef = shared_1.db.doc(`groups/${groupId}/members/${uid}`);
+        // All reads first (Firestore requires reads before writes).
+        const posterSnap = await tx.get(posterRef);
+        const callerSnap = uid === posterId ? posterSnap : await tx.get(callerRef);
+        const callerMemberSnap = await tx.get(callerMemberRef);
+        // The poster's display name is only needed when seeding their stake doc.
+        const seedPoster = !posterSnap.exists && uid !== posterId;
+        const posterMemberSnap = seedPoster ?
+            await tx.get(shared_1.db.doc(`groups/${groupId}/members/${posterId}`)) :
+            null;
+        /* ── all reads done; now writes ── */
+        const now = firestore_1.Timestamp.now();
+        const callerName = (_c = (_b = callerMemberSnap.data()) === null || _b === void 0 ? void 0 : _b.displayName) !== null && _c !== void 0 ? _c : "";
+        // First pool ever: materialise the poster's original stake (== the current
+        // total) as a contribution doc so totals stay = sum(contributions). Missing
+        // poster doc ⟺ no contributions yet ⟺ price is still the original stake.
+        if (seedPoster) {
+            tx.set(posterRef, {
+                uid: posterId,
+                displayName: (_e = (_d = posterMemberSnap === null || posterMemberSnap === void 0 ? void 0 : posterMemberSnap.data()) === null || _d === void 0 ? void 0 : _d.displayName) !== null && _e !== void 0 ? _e : "",
+                amount: total,
+                createdAt: now,
+                updatedAt: now,
+            });
+        }
+        // The caller's prior stake. When the poster pools for the first time their
+        // own doc doesn't exist yet but the original stake is baked into `total`.
+        const callerPrev = callerSnap.exists ?
+            ((_g = (_f = callerSnap.data()) === null || _f === void 0 ? void 0 : _f.amount) !== null && _g !== void 0 ? _g : 0) :
+            (uid === posterId ? total : 0);
+        const callerCreatedAt = callerSnap.exists ?
+            ((_j = (_h = callerSnap.data()) === null || _h === void 0 ? void 0 : _h.createdAt) !== null && _j !== void 0 ? _j : now) :
+            now;
+        tx.set(callerRef, {
+            uid,
+            displayName: callerName,
+            amount: callerPrev + amount,
+            createdAt: callerCreatedAt,
+            updatedAt: now,
+        });
+        const newTotal = total + amount;
+        // `price` is the live total; `points` stays pinned to it (1pt = NZ$1) so the
+        // leaderboard award on approval reflects the full pooled value.
+        tx.update(bountyRef, { price: newTotal, points: newTotal });
+        // Activity event is a post-commit-style side effect, but cheap and safe to
+        // write in-band here; it isn't load-bearing for the total.
+        tx.set(activityRef, {
+            kind: "contributed",
+            actorId: uid,
+            at: now,
+            amount,
+        });
+        return { posterId, newTotal, bountyTitle: bounty.title };
+    });
+    return { ok: true, total: result.newTotal };
+});
 /* ── approveBounty ────────────────────────────────────────────────── */
 exports.approveBounty = (0, https_1.onCall)(shared_1.CALLABLE_OPTS, async (req) => {
     var _a;
@@ -201,14 +326,14 @@ exports.approveBounty = (0, https_1.onCall)(shared_1.CALLABLE_OPTS, async (req) 
     const bountyId = (0, shared_1.requireString)(data.bountyId, "bountyId");
     await requireMembership(groupId, uid);
     const bountyRef = shared_1.db.doc(`groups/${groupId}/bounties/${bountyId}`);
+    const contributionsRef = bountyRef.collection("contributions");
     const leaderboardRef = shared_1.db.doc(`groups/${groupId}/leaderboard/summary`);
     const activityRef = shared_1.db
         .collection(`groups/${groupId}/bounties/${bountyId}/activity`)
         .doc();
-    const iouRef = shared_1.db.collection("ious").doc();
     const now = firestore_1.Timestamp.now();
     const result = await shared_1.db.runTransaction(async (tx) => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
         const bountySnap = await tx.get(bountyRef);
         if (!bountySnap.exists) {
             throw new https_1.HttpsError("not-found", "Bounty not found.");
@@ -237,29 +362,81 @@ exports.approveBounty = (0, https_1.onCall)(shared_1.CALLABLE_OPTS, async (req) 
         const currentEntries = lbSnap.exists ?
             ((_d = (_c = lbSnap.data()) === null || _c === void 0 ? void 0 : _c.entries) !== null && _d !== void 0 ? _d : []) :
             [];
+        // Pooled contributions (cash only). Read with the other reads so we can fan
+        // out one IOU per contributor below. Empty ⟺ nobody pooled, in which case
+        // we fall back to the single-IOU behaviour using the bounty's own price.
+        const isCustom = bounty.rewardType === "custom";
+        const contribSnap = isCustom ?
+            null : await tx.get(contributionsRef);
         /* ── all reads done; now writes ── */
-        const newPoints = ((_e = member.points) !== null && _e !== void 0 ? _e : 0) + bounty.price;
+        const pts = bountyPoints(bounty);
+        const newPoints = ((_e = member.points) !== null && _e !== void 0 ? _e : 0) + pts;
         const newWins = ((_f = member.wins) !== null && _f !== void 0 ? _f : 0) + 1;
-        const newUserTotal = userTotal + bounty.price;
+        const newUserTotal = userTotal + pts;
         tx.update(bountyRef, { state: "successful", resolvedAt: now });
         tx.update(memberRef, { points: newPoints, wins: newWins });
         tx.set(userRef, { totalPoints: newUserTotal }, { merge: true });
-        tx.set(iouRef, {
-            groupId,
-            debtorId: bounty.posterId,
-            creditorId: claimantId,
-            amount: bounty.price,
-            bountyId,
-            status: "open",
-            createdAt: now,
-        });
+        // One IOU per debtor, each settling independently (cash or Stripe):
+        //  • Custom reward → a single manual-only IOU carrying the reward text with
+        //    no monetary amount; the Stripe callable refuses to build a PI for it.
+        //  • Pooled cash bounty → one cash IOU per contributor for their own share
+        //    (the poster's stake is just another contributor). A contributor who is
+        //    also the winner is skipped — they don't owe themselves.
+        //  • Cash bounty nobody pooled on (or a legacy doc) → today's single IOU
+        //    for the full price.
+        let posterOwed = (_g = bounty.price) !== null && _g !== void 0 ? _g : 0;
+        if (isCustom) {
+            tx.set(shared_1.db.collection("ious").doc(), {
+                groupId,
+                debtorId: bounty.posterId,
+                creditorId: claimantId,
+                amount: 0,
+                rewardType: "custom",
+                rewardText: (_h = bounty.rewardText) !== null && _h !== void 0 ? _h : "",
+                bountyId,
+                status: "open",
+                createdAt: now,
+            });
+        }
+        else if (contribSnap && !contribSnap.empty) {
+            posterOwed = 0;
+            for (const c of contribSnap.docs) {
+                const cData = c.data();
+                const debtorId = (_j = cData.uid) !== null && _j !== void 0 ? _j : c.id;
+                const amount = (_k = cData.amount) !== null && _k !== void 0 ? _k : 0;
+                if (amount <= 0 || debtorId === claimantId)
+                    continue;
+                if (debtorId === bounty.posterId)
+                    posterOwed = amount;
+                tx.set(shared_1.db.collection("ious").doc(), {
+                    groupId,
+                    debtorId,
+                    creditorId: claimantId,
+                    amount,
+                    bountyId,
+                    status: "open",
+                    createdAt: now,
+                });
+            }
+        }
+        else {
+            tx.set(shared_1.db.collection("ious").doc(), {
+                groupId,
+                debtorId: bounty.posterId,
+                creditorId: claimantId,
+                amount: bounty.price,
+                bountyId,
+                status: "open",
+                createdAt: now,
+            });
+        }
         const updatedEntries = upsertLeaderboardEntry(currentEntries, {
             userId: claimantId,
-            name: (_g = member.displayName) !== null && _g !== void 0 ? _g : "",
-            photoURL: (_h = member.photoURL) !== null && _h !== void 0 ? _h : null,
+            name: (_l = member.displayName) !== null && _l !== void 0 ? _l : "",
+            photoURL: (_m = member.photoURL) !== null && _m !== void 0 ? _m : null,
             points: newPoints,
             wins: newWins,
-            losses: (_j = member.losses) !== null && _j !== void 0 ? _j : 0,
+            losses: (_o = member.losses) !== null && _o !== void 0 ? _o : 0,
         });
         tx.set(leaderboardRef, {
             entries: updatedEntries,
@@ -269,7 +446,12 @@ exports.approveBounty = (0, https_1.onCall)(shared_1.CALLABLE_OPTS, async (req) 
         return {
             claimantId,
             posterId: bounty.posterId,
-            price: bounty.price,
+            points: pts,
+            isCustom,
+            // What the poster now owes, phrased for the notification body. With a
+            // pooled bounty the poster owes only their own share; other contributors
+            // get their own IOUs (and their own notification is out of scope here).
+            owed: isCustom ? ((_p = bounty.rewardText) !== null && _p !== void 0 ? _p : "the reward") : `$${posterOwed}`,
             bountyTitle: bounty.title,
         };
     });
@@ -281,18 +463,19 @@ exports.approveBounty = (0, https_1.onCall)(shared_1.CALLABLE_OPTS, async (req) 
             bountyId,
             actorId: uid,
             actorName: reviewerName,
-            amount: result.price,
+            amount: result.points,
             title: "Claim approved",
-            body: `Your claim on "${result.bountyTitle}" was approved. +${result.price} pts.`,
+            body: `Your claim on "${result.bountyTitle}" was approved. ` +
+                `+${result.points} pts.`,
         }),
         (0, shared_1.writeInbox)(result.posterId, {
             kind: "bounty_resolved",
             groupId,
             bountyId,
             actorId: uid,
-            amount: result.price,
+            amount: result.points,
             title: "Bounty resolved",
-            body: `You approved "${result.bountyTitle}". You now owe $${result.price}.`,
+            body: `You approved "${result.bountyTitle}". You now owe ${result.owed}.`,
         }),
     ]);
     return { ok: true };
@@ -345,9 +528,10 @@ exports.rejectBounty = (0, https_1.onCall)(shared_1.CALLABLE_OPTS, async (req) =
             ((_d = (_c = lbSnap.data()) === null || _c === void 0 ? void 0 : _c.entries) !== null && _d !== void 0 ? _d : []) :
             [];
         /* ── all reads done; now writes ── */
-        const newPoints = Math.max(0, ((_e = member.points) !== null && _e !== void 0 ? _e : 0) - bounty.price);
+        const pts = bountyPoints(bounty);
+        const newPoints = Math.max(0, ((_e = member.points) !== null && _e !== void 0 ? _e : 0) - pts);
         const newLosses = ((_f = member.losses) !== null && _f !== void 0 ? _f : 0) + 1;
-        const newUserTotal = Math.max(0, userTotal - bounty.price);
+        const newUserTotal = Math.max(0, userTotal - pts);
         tx.update(bountyRef, {
             state: "failed",
             resolvedAt: now,
@@ -376,7 +560,7 @@ exports.rejectBounty = (0, https_1.onCall)(shared_1.CALLABLE_OPTS, async (req) =
         return {
             claimantId,
             posterId: bounty.posterId,
-            price: bounty.price,
+            points: pts,
             bountyTitle: bounty.title,
         };
     });
@@ -387,11 +571,11 @@ exports.rejectBounty = (0, https_1.onCall)(shared_1.CALLABLE_OPTS, async (req) =
         bountyId,
         actorId: uid,
         actorName: reviewerName,
-        amount: result.price,
+        amount: result.points,
         reason,
         title: "Claim rejected",
         body: `Your claim on "${result.bountyTitle}" was rejected.` +
-            (reason ? ` Reason: ${reason}` : "") + ` -${result.price} pts.`,
+            (reason ? ` Reason: ${reason}` : "") + ` -${result.points} pts.`,
     });
     return { ok: true };
 });

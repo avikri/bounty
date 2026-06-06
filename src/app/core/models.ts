@@ -44,12 +44,31 @@ export interface Group {
   surfaceTone: 'primary' | 'info' | 'success' | 'purple' | 'warn';
 }
 
+/**
+ * What a bounty pays out. `cash` is the original behaviour (a monetary price,
+ * Stripe-eligible, points = dollar value). `custom` is a freeform reward like
+ * "3 beers" — settled manually only, never by card. Absent `rewardType` on a
+ * doc is treated as `cash` (see mapBounty) so pre-feature bounties keep working.
+ */
+export type RewardType = 'cash' | 'custom';
+
 export interface Bounty {
   id: string;
   groupId: string;
   title: string;
   description: string;
+  /** Cash | custom discriminator. Defaults to 'cash' for legacy docs. */
+  rewardType: RewardType;
+  /** Whole NZD dollars for a `cash` bounty; 0 for `custom`. */
   price: number;
+  /** Freeform reward text for a `custom` bounty (1–10 chars). */
+  rewardText?: string;
+  /**
+   * Leaderboard points awarded on approval (docked on rejection). For `cash`
+   * this equals `price`; for `custom` the poster sets it (1–1000). Decoupled
+   * from the reward so a non-cash bounty still has a well-defined score.
+   */
+  points: number;
   /** ISO 4217 currency the price is denominated in (NZD for new bounties). */
   currency?: string;
   state: BountyState;
@@ -65,10 +84,26 @@ export interface Bounty {
 export interface ActivityEvent {
   id: string;
   bountyId: string;
-  kind: 'created' | 'claimed' | 'submitted' | 'approved' | 'rejected' | 'expired';
+  kind: 'created' | 'claimed' | 'contributed' | 'submitted' | 'approved' | 'rejected' | 'expired';
   actorId: string;
   at: Date;
   note?: string | null;
+  /** Dollars added, for `contributed` events. */
+  amount?: number;
+}
+
+/**
+ * One pooled stake on a cash bounty, at
+ * `groups/{gid}/bounties/{bid}/contributions/{contributorUid}`. Written only by
+ * the contributeToBounty Cloud Function; keyed by contributor uid so repeat adds
+ * accumulate. `amount` is whole NZD dollars (same unit as `Bounty.price`). The
+ * sum of a bounty's contributions equals its live `price`; on approval each
+ * contributor owes the claimant their own share as a separate IOU.
+ */
+export interface Contribution {
+  uid: string;
+  displayName?: string;
+  amount: number;
 }
 
 export interface IOU {
@@ -76,8 +111,17 @@ export interface IOU {
   groupId: string;
   debtorId: string;
   creditorId: string;
+  /** Monetary value in whole NZD dollars for a cash IOU; 0 for a custom one. */
   amount: number;
   bountyId: string;
+  /**
+   * Inherited from the bounty. `custom` IOUs carry `rewardText`, have no
+   * monetary amount, and are manual-settle only (the card path rejects them).
+   * Absent ⇒ `cash` (legacy IOUs).
+   */
+  rewardType?: RewardType;
+  /** Freeform reward text for a `custom` IOU. */
+  rewardText?: string;
   status: 'open' | 'debtor_marked' | 'creditor_marked' | 'settled';
   createdAt: Date;
   settledAt?: Date;
@@ -99,6 +143,24 @@ export interface IOU {
    * they can pay by card; cleared (and the debtor notified) once payable.
    */
   awaitingCreditorOnboarding?: boolean;
+}
+
+/**
+ * A comment on a bounty, at `groups/{gid}/bounties/{bid}/comments/{commentId}`.
+ * Written directly by clients and governed by strict firestore.rules (an
+ * exhaustive field allowlist + length bounds), mirroring the bounty-creation
+ * precedent rather than a callable — comments are non-load-bearing social
+ * content. `authorDisplayName` is denormalised at write time (the codebase's
+ * denormalisation pattern); `editedAt` is set only once a comment is edited.
+ */
+export interface Comment {
+  id: string;
+  authorUid: string;
+  authorDisplayName: string;
+  /** Trimmed, 1–500 chars. */
+  text: string;
+  createdAt: Date;
+  editedAt?: Date;
 }
 
 export interface LeaderboardEntry {

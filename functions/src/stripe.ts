@@ -123,6 +123,7 @@ interface IouData {
   debtorId: string;
   creditorId: string;
   amount: number;
+  rewardType?: "cash" | "custom";
   status: "open" | "debtor_marked" | "creditor_marked" | "settled";
   stripePaymentIntentId?: string;
 }
@@ -268,6 +269,14 @@ export const createIouPaymentIntent = onCall(
       }
       if (iou.status === "settled") {
         throw new HttpsError("failed-precondition", "IOU already settled.");
+      }
+      // Custom-reward IOUs (e.g. "3 beers") have no monetary amount and are
+      // settled manually only. Reject before building any PaymentIntent — the
+      // card path never applies to them.
+      if (iou.rewardType === "custom") {
+        throw new HttpsError(
+            "failed-precondition",
+            "This reward can't be paid by card — settle it manually.");
       }
 
       // Can the creditor actually receive funds?

@@ -214,6 +214,12 @@ exports.createIouPaymentIntent = (0, https_1.onCall)(Object.assign(Object.assign
     if (iou.status === "settled") {
         throw new https_1.HttpsError("failed-precondition", "IOU already settled.");
     }
+    // Custom-reward IOUs (e.g. "3 beers") have no monetary amount and are
+    // settled manually only. Reject before building any PaymentIntent — the
+    // card path never applies to them.
+    if (iou.rewardType === "custom") {
+        throw new https_1.HttpsError("failed-precondition", "This reward can't be paid by card — settle it manually.");
+    }
     // Can the creditor actually receive funds?
     const creditorSnap = await shared_1.db.doc(`users/${iou.creditorId}`).get();
     const creditor = creditorSnap.data();

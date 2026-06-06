@@ -93,6 +93,7 @@ const RATE_RULES = {
     joinGroup: { max: 20, windowSec: 3600 },
     regenerateInviteCode: { max: 20, windowSec: 3600 },
     claimBounty: { max: 60, windowSec: 3600 },
+    contributeToBounty: { max: 60, windowSec: 3600 },
     submitProof: { max: 60, windowSec: 3600 },
     approveBounty: { max: 120, windowSec: 3600 },
     rejectBounty: { max: 120, windowSec: 3600 },

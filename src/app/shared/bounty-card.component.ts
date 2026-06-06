@@ -18,16 +18,16 @@ import { IconComponent } from './icon.component';
       <div class="row1">
         <app-state-badge [bountyState]="bounty.state" />
         @if (bounty.state === 'successful') {
-          <div class="price success">+\${{ bounty.price }}</div>
+          <div class="price success">+{{ reward() }}</div>
         } @else if (bounty.state === 'failed') {
-          <div class="price danger">−{{ bounty.price }} pts</div>
+          <div class="price danger">−{{ bounty.points }} pts</div>
         } @else if (bounty.state === 'expired') {
           <div class="price expired">
             <app-icon name="lock" [size]="14" />
-            \${{ bounty.price }}
+            {{ reward() }}
           </div>
         } @else {
-          <div class="price">\${{ bounty.price }}<small> · {{ bounty.price }} pts</small></div>
+          <div class="price">{{ reward() }}<small> · {{ bounty.points }} pts</small></div>
         }
       </div>
       <div class="title-line">{{ bounty.title }}</div>
@@ -95,6 +95,13 @@ export class BountyCardComponent {
     return this.bounty.state === 'expired'
       || this.bounty.state === 'failed'
       || this.bounty.state === 'successful';
+  }
+
+  /** Reward shown on the card: `$amount` for cash, the freeform text for custom. */
+  reward(): string {
+    return this.bounty.rewardType === 'custom'
+      ? this.bounty.rewardText ?? '—'
+      : `$${this.bounty.price}`;
   }
 
   poster() {

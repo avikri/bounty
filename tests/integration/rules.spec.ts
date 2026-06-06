@@ -65,6 +65,42 @@ function availableBounty(posterId: string) {
   };
 }
 
+/** A cash bounty in the new explicit shape (rewardType + points pinned to price). */
+function cashBounty(posterId: string, overrides: Record<string, unknown> = {}) {
+  return {
+    title: 'Dishes',
+    description: 'tonight',
+    rewardType: 'cash' as const,
+    price: 3,
+    points: 3,
+    currency: 'NZD',
+    state: 'available' as const,
+    posterId,
+    claimantId: null,
+    expiresAt: Timestamp.fromDate(new Date(Date.now() + WEEK_MS)),
+    createdAt: serverTimestamp(),
+    ...overrides,
+  };
+}
+
+/** A custom (freeform-reward) bounty: rewardText + bounded points, no price. */
+function customBounty(posterId: string, overrides: Record<string, unknown> = {}) {
+  return {
+    title: 'Beers',
+    description: 'winner picks the bar',
+    rewardType: 'custom' as const,
+    rewardText: '3 beers',
+    points: 40,
+    currency: 'NZD',
+    state: 'available' as const,
+    posterId,
+    claimantId: null,
+    expiresAt: Timestamp.fromDate(new Date(Date.now() + WEEK_MS)),
+    createdAt: serverTimestamp(),
+    ...overrides,
+  };
+}
+
 beforeEach(async () => {
   await resetEmulators();
 });
@@ -224,6 +260,66 @@ describe('groups/{gid}/bounties/{bid}', () => {
     );
   });
 
+  it('[P1] allows a valid cash bounty in the explicit rewardType/points shape', async () => {
+    const { member, groupId } = await seedGroup();
+    const ref = await addDoc(
+      collection(member.db, 'groups', groupId, 'bounties'),
+      cashBounty(member.uid, { price: 25, points: 25 }),
+    );
+    expect(ref.id).toBeTruthy();
+  });
+
+  it('[P1] allows a valid custom bounty (rewardText + bounded points, no price)', async () => {
+    const { member, groupId } = await seedGroup();
+    const ref = await addDoc(
+      collection(member.db, 'groups', groupId, 'bounties'),
+      customBounty(member.uid),
+    );
+    expect(ref.id).toBeTruthy();
+  });
+
+  it('[P1] rejects a custom bounty that also carries a price', async () => {
+    const { member, groupId } = await seedGroup();
+    await expectReject(
+      addDoc(collection(member.db, 'groups', groupId, 'bounties'),
+        customBounty(member.uid, { price: 5 })),
+    );
+  });
+
+  it('[P1] rejects a cash bounty with no price', async () => {
+    const { member, groupId } = await seedGroup();
+    // rewardType cash but the price field omitted entirely.
+    const { price, ...noPrice } = cashBounty(member.uid);
+    void price;
+    await expectReject(
+      addDoc(collection(member.db, 'groups', groupId, 'bounties'), noPrice),
+    );
+  });
+
+  it('[P1] rejects a custom bounty with oversized rewardText (>10 chars)', async () => {
+    const { member, groupId } = await seedGroup();
+    await expectReject(
+      addDoc(collection(member.db, 'groups', groupId, 'bounties'),
+        customBounty(member.uid, { rewardText: 'x'.repeat(11) })),
+    );
+  });
+
+  it('[P1] rejects forged points (custom points above the 1000 cap)', async () => {
+    const { member, groupId } = await seedGroup();
+    await expectReject(
+      addDoc(collection(member.db, 'groups', groupId, 'bounties'),
+        customBounty(member.uid, { points: 5000 })),
+    );
+  });
+
+  it('[P1] rejects cash points that do not equal the dollar price', async () => {
+    const { member, groupId } = await seedGroup();
+    await expectReject(
+      addDoc(collection(member.db, 'groups', groupId, 'bounties'),
+        cashBounty(member.uid, { price: 10, points: 9999 })),
+    );
+  });
+
   it('forbids any direct client update (transitions are CF-only)', async () => {
     const { member, groupId } = await seedGroup();
     const ref = await addDoc(
@@ -255,6 +351,26 @@ describe('groups/{gid}/bounties/{bid}', () => {
     await expectReject(deleteDoc(ref2));
   });
 
+  it('forbids writing to the contributions subcollection directly', async () => {
+    const { member, groupId } = await seedGroup();
+    const ref = await addDoc(
+      collection(member.db, 'groups', groupId, 'bounties'),
+      availableBounty(member.uid),
+    );
+    // The running total is raised only by the contributeToBounty callable.
+    await expectReject(
+      setDoc(
+        doc(member.db, 'groups', groupId, 'bounties', ref.id, 'contributions', member.uid),
+        { uid: member.uid, amount: 999 },
+      ),
+    );
+    // …but a group member may read the (server-written) contributor list.
+    const list = await getDocs(
+      collection(member.db, 'groups', groupId, 'bounties', ref.id, 'contributions'),
+    );
+    expect(list.empty).toBe(true);
+  });
+
   it('forbids writing to the activity timeline directly', async () => {
     const { member, groupId } = await seedGroup();
     const ref = await addDoc(
@@ -268,6 +384,143 @@ describe('groups/{gid}/bounties/{bid}', () => {
         at: Timestamp.now(),
       }),
     );
+  });
+});
+
+describe('groups/{gid}/bounties/{bid}/comments/{commentId}', () => {
+  interface CommentFixture {
+    owner: TestUser;
+    poster: TestUser;
+    commenter: TestUser;
+    other: TestUser;
+    stranger: TestUser;
+    groupId: string;
+    bountyId: string;
+  }
+
+  /** owner + 3 joined members (poster, commenter, other) + a stranger, with a
+   *  bounty posted by `poster`. Lets us separate the author / poster / owner
+   *  delete branches and exercise the member/non-member split. */
+  async function seedComments(): Promise<CommentFixture> {
+    const owner = await createUser('Olive Owner');
+    const poster = await createUser('Pat Poster');
+    const commenter = await createUser('Cory Commenter');
+    const other = await createUser('Ola Other');
+    const stranger = await createUser('Sam Stranger');
+
+    const { groupId, inviteCode } = await owner.call<{ groupId: string; inviteCode: string }>(
+      'createGroup', { name: 'Roomies' },
+    );
+    await poster.call('joinGroup', { inviteCode });
+    await commenter.call('joinGroup', { inviteCode });
+    await other.call('joinGroup', { inviteCode });
+
+    const bountyRef = await addDoc(
+      collection(poster.db, 'groups', groupId, 'bounties'),
+      availableBounty(poster.uid),
+    );
+    return { owner, poster, commenter, other, stranger, groupId, bountyId: bountyRef.id };
+  }
+
+  function commentsCol(u: TestUser, f: CommentFixture) {
+    return collection(u.db, 'groups', f.groupId, 'bounties', f.bountyId, 'comments');
+  }
+  function commentRef(u: TestUser, f: CommentFixture, id: string) {
+    return doc(u.db, 'groups', f.groupId, 'bounties', f.bountyId, 'comments', id);
+  }
+  function comment(authorUid: string, overrides: Record<string, unknown> = {}) {
+    return {
+      authorUid,
+      authorDisplayName: 'Cory Commenter',
+      text: 'first!',
+      createdAt: serverTimestamp(),
+      ...overrides,
+    };
+  }
+
+  it('lets a group member post a comment and read the thread', async () => {
+    const f = await seedComments();
+    const ref = await addDoc(commentsCol(f.commenter, f), comment(f.commenter.uid));
+    expect(ref.id).toBeTruthy();
+    const snap = await getDocs(commentsCol(f.commenter, f));
+    expect(snap.size).toBe(1);
+  });
+
+  it('forbids a non-member from reading or posting comments', async () => {
+    const f = await seedComments();
+    await addDoc(commentsCol(f.commenter, f), comment(f.commenter.uid));
+    await expectReject(getDocs(commentsCol(f.stranger, f)));
+    await expectReject(addDoc(commentsCol(f.stranger, f), comment(f.stranger.uid)));
+  });
+
+  it('forbids forging authorUid as another user', async () => {
+    const f = await seedComments();
+    await expectReject(
+      addDoc(commentsCol(f.commenter, f), comment(f.poster.uid)),
+    );
+  });
+
+  it('rejects empty and over-length (>500) comment text', async () => {
+    const f = await seedComments();
+    await expectReject(addDoc(commentsCol(f.commenter, f), comment(f.commenter.uid, { text: '' })));
+    await expectReject(
+      addDoc(commentsCol(f.commenter, f), comment(f.commenter.uid, { text: 'x'.repeat(501) })),
+    );
+  });
+
+  it('rejects a comment carrying a field outside the allowlist', async () => {
+    const f = await seedComments();
+    // editedAt may only appear on an update, never on create.
+    await expectReject(
+      addDoc(commentsCol(f.commenter, f), comment(f.commenter.uid, { editedAt: serverTimestamp() })),
+    );
+  });
+
+  it('lets the author edit only their own comment text', async () => {
+    const f = await seedComments();
+    const ref = await addDoc(commentsCol(f.commenter, f), comment(f.commenter.uid));
+
+    // Author edits text (+ editedAt stamp) — allowed.
+    await updateDoc(commentRef(f.commenter, f, ref.id), {
+      text: 'edited', editedAt: serverTimestamp(),
+    });
+
+    // Author tries to rewrite authorUid — denied (outside the {text,editedAt} set).
+    await expectReject(
+      updateDoc(commentRef(f.commenter, f, ref.id), {
+        authorUid: f.other.uid, editedAt: serverTimestamp(),
+      }),
+    );
+
+    // Another member tries to edit it — denied (not the author).
+    await expectReject(
+      updateDoc(commentRef(f.other, f, ref.id), {
+        text: 'hax', editedAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it("forbids a plain member from deleting someone else's comment", async () => {
+    const f = await seedComments();
+    const ref = await addDoc(commentsCol(f.commenter, f), comment(f.commenter.uid));
+    // `other` is a member but neither the author, the poster, nor the owner.
+    await expectReject(deleteDoc(commentRef(f.other, f, ref.id)));
+  });
+
+  it('lets the author, the bounty poster, and the group owner delete a comment', async () => {
+    const f = await seedComments();
+
+    // Author deletes their own.
+    const a = await addDoc(commentsCol(f.commenter, f), comment(f.commenter.uid));
+    await deleteDoc(commentRef(f.commenter, f, a.id));
+
+    // Bounty poster (not the owner) moderates a member's comment.
+    const b = await addDoc(commentsCol(f.commenter, f), comment(f.commenter.uid));
+    await deleteDoc(commentRef(f.poster, f, b.id));
+
+    // Group owner (not the poster) moderates a member's comment.
+    const c = await addDoc(commentsCol(f.commenter, f), comment(f.commenter.uid));
+    await deleteDoc(commentRef(f.owner, f, c.id));
   });
 });
 

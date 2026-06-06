@@ -245,6 +245,65 @@ describe('stripePaymentsEnabled kill-switch', () => {
   });
 });
 
+describe('createIouPaymentIntent rejects non-cash (custom) IOUs', () => {
+  /** Drive a CUSTOM-reward bounty to approval so a custom IOU exists. */
+  async function seedCustomIou(points = 40): Promise<Fixture> {
+    const poster = await createUser('Pat Poster');
+    const claimant = await createUser('Casey Claimant');
+    const { groupId, inviteCode } = await poster.call<{
+      groupId: string; inviteCode: string;
+    }>('createGroup', { name: 'Roomies' });
+    await claimant.call('joinGroup', { inviteCode });
+
+    const ref = await addDoc(collection(poster.db, 'groups', groupId, 'bounties'), {
+      title: 'First round',
+      description: 'winner picks the bar',
+      rewardType: 'custom',
+      rewardText: '3 beers',
+      points,
+      currency: 'NZD',
+      state: 'available',
+      posterId: poster.uid,
+      claimantId: null,
+      expiresAt: Timestamp.fromDate(new Date(Date.now() + WEEK_MS)),
+      createdAt: serverTimestamp(),
+    });
+    await claimant.call('claimBounty', { groupId, bountyId: ref.id });
+    await claimant.call('submitProof', {
+      groupId, bountyId: ref.id, proof: { urls: [], note: 'done' },
+    });
+    await poster.call('approveBounty', { groupId, bountyId: ref.id });
+
+    const ious = await getDocs(
+      query(collection(poster.db, 'ious'), where('debtorId', '==', poster.uid)),
+    );
+    return { poster, claimant, groupId, iouId: ious.docs[0]!.id };
+  }
+
+  it('rejects with failed-precondition and never touches Stripe / the IOU', async () => {
+    const f = await seedCustomIou();
+    await expectReject(
+      f.poster.call('createIouPaymentIntent', { iouId: f.iouId }),
+      'failed-precondition',
+    );
+    // No PaymentIntent metadata or onboarding flag was written.
+    const iou = await iouData(f.iouId);
+    expect(iou['paymentMethod']).toBeUndefined();
+    expect(iou['stripePaymentIntentId']).toBeUndefined();
+    expect(iou['awaitingCreditorOnboarding']).toBeUndefined();
+    expect(iou['status']).toBe('open');
+  });
+
+  it('still lets a custom IOU settle manually (cash handshake)', async () => {
+    const f = await seedCustomIou();
+    await f.poster.call('markIouPaid', { iouId: f.iouId });
+    const res = await f.claimant.call<{ settled: boolean }>(
+      'markIouPaid', { iouId: f.iouId });
+    expect(res.settled).toBe(true);
+    expect((await iouData(f.iouId))['status']).toBe('settled');
+  });
+});
+
 describe('createIouPaymentIntent (validation + lazy onboarding)', () => {
   it('rejects a non-debtor caller', async () => {
     const f = await seedIou();
