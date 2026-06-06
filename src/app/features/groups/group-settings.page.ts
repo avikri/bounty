@@ -48,6 +48,9 @@ import { ToastService } from '../../shared/toast.service';
           <div class="kicker">Invite code</div>
           <div class="code-row">
             <code data-testid="invite-code">{{ g.inviteCode }}</code>
+            <button class="btn ghost sm" (click)="copyCode(g.inviteCode)" data-testid="copy-code">
+              {{ copied() ? 'Copied!' : 'Copy' }}
+            </button>
             @if (canEdit()) {
               <button class="btn ghost" (click)="regenCode()" [disabled]="busy()" data-testid="regen-code">Regenerate</button>
             }
@@ -116,7 +119,7 @@ import { ToastService } from '../../shared/toast.service';
       margin-bottom: 10px;
     }
     .code-row {
-      display: flex; align-items: center; gap: 10px;
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
       margin-bottom: 6px;
     }
     .code-row code {
@@ -163,6 +166,7 @@ export class GroupSettingsPage {
   protected readonly emojiDraft = signal('');
   protected readonly expiryDraft = signal(7);
   protected readonly busy = signal(false);
+  protected readonly copied = signal(false);
 
   protected readonly canEdit = computed(() => {
     const g = this.group();
@@ -253,6 +257,17 @@ export class GroupSettingsPage {
       this.toast.error(this.toast.formatError(e));
     } finally {
       this.busy.set(false);
+    }
+  }
+
+  async copyCode(code: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(code);
+      this.copied.set(true);
+      setTimeout(() => this.copied.set(false), 1500);
+      this.toast.success('Invite code copied');
+    } catch (e) {
+      this.toast.error(this.toast.formatError(e));
     }
   }
 
