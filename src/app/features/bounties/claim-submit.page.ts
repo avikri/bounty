@@ -3,6 +3,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { DataService } from '../../core/data.service';
+import { Bounty } from '../../core/models';
 import { IconComponent } from '../../shared/icon.component';
 import { ToastService } from '../../shared/toast.service';
 
@@ -37,7 +38,7 @@ const MAX_VIDEO_BYTES = 100 * 1024 * 1024; // 100 MB
         <div class="bounty-summary">
           <div class="kicker">Bounty</div>
           <div class="title">{{ b.title }}</div>
-          <div class="meta">\${{ b.price }} · posted by {{ poster()?.handle }}</div>
+          <div class="meta">{{ reward(b) }} · posted by {{ poster()?.handle }}</div>
         </div>
 
         <label class="label">Proof (up to {{ maxFiles }})</label>
@@ -196,6 +197,11 @@ export class ClaimSubmitPage {
     const b = this.bounty();
     return b ? this.data.userById(b.posterId) : undefined;
   });
+
+  /** Reward label: `$amount` for cash, the freeform text for custom. */
+  reward(b: Bounty): string {
+    return b.rewardType === 'custom' ? b.rewardText ?? '—' : `$${b.price}`;
+  }
   protected note = signal('');
   protected busy = signal(false);
   protected files = signal<ProofFile[]>([]);

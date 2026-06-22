@@ -23,6 +23,14 @@
         { "fieldPath": "state",     "order": "ASCENDING" },
         { "fieldPath": "expiresAt", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "ious",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "creditorId",                "order": "ASCENDING" },
+        { "fieldPath": "awaitingCreditorOnboarding", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

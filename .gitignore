@@ -92,3 +92,10 @@ skills-lock.json
 
 # dataconnect generated files
 .dataconnect
+
+# Stray TS build artifacts that belong in lib/, not src/
+functions/src/*.js
+functions/src/*.js.map
+
+# Streamed integration-test log artifact
+integ.out

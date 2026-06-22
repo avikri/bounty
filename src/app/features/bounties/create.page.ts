@@ -7,6 +7,8 @@ import { ToastService } from '../../shared/toast.service';
 
 const MAX_TITLE = 80;
 const MAX_DESCRIPTION = 1000;
+const MAX_REWARD = 10;
+const MAX_POINTS = 1000;
 
 @Component({
   selector: 'app-create-bounty',
@@ -32,19 +34,45 @@ const MAX_DESCRIPTION = 1000;
                   placeholder="Rules, proof requirements, witness clauses..." data-testid="bounty-description"></textarea>
         <div class="gap"></div>
 
-        <div class="row2">
-          <div>
-            <label class="label">Price</label>
-            <div class="price-input">
-              <span class="prefix">$</span>
-              <input class="input" type="number" [(ngModel)]="price" min="1" step="1" data-testid="bounty-price" />
+        <label class="label">Reward type</label>
+        <div class="seg" role="tablist">
+          <button type="button" class="seg-btn" [class.on]="rewardType() === 'cash'"
+                  (click)="rewardType.set('cash')" data-testid="reward-type-cash">Cash</button>
+          <button type="button" class="seg-btn" [class.on]="rewardType() === 'custom'"
+                  (click)="rewardType.set('custom')" data-testid="reward-type-custom">Custom</button>
+        </div>
+        <div class="gap"></div>
+
+        @if (rewardType() === 'cash') {
+          <div class="row2">
+            <div>
+              <label class="label">Price</label>
+              <div class="price-input">
+                <span class="prefix">$</span>
+                <input class="input" type="number" [(ngModel)]="price" min="1" step="1" data-testid="bounty-price" />
+              </div>
+            </div>
+            <div>
+              <label class="label">Expires</label>
+              <input class="input" type="date" [(ngModel)]="expires" data-testid="bounty-expires" />
             </div>
           </div>
-          <div>
-            <label class="label">Expires</label>
-            <input class="input" type="date" [(ngModel)]="expires" data-testid="bounty-expires" />
+        } @else {
+          <label class="label">Reward <span class="cap">{{ rewardText().length }}/{{ MAX_REWARD }}</span></label>
+          <input class="input" [(ngModel)]="rewardText" placeholder="e.g. 3 beers"
+                 [maxlength]="MAX_REWARD" data-testid="bounty-reward-text" />
+          <div class="gap"></div>
+          <div class="row2">
+            <div>
+              <label class="label">Points</label>
+              <input class="input" type="number" [(ngModel)]="points" min="1" max="1000" step="1" data-testid="bounty-points" />
+            </div>
+            <div>
+              <label class="label">Expires</label>
+              <input class="input" type="date" [(ngModel)]="expires" data-testid="bounty-expires" />
+            </div>
           </div>
-        </div>
+        }
 
         <div class="gap"></div>
 
@@ -57,7 +85,11 @@ const MAX_DESCRIPTION = 1000;
         <div class="gap"></div>
 
         <div class="payout-hint">
-          If approved, you'll owe the claimant <strong>\${{ price() || 0 }}</strong> (settled offline) and they'll earn <strong>{{ price() || 0 }} points</strong>.
+          @if (rewardType() === 'cash') {
+            If approved, you'll owe the claimant <strong>\${{ price() || 0 }}</strong> (settled offline) and they'll earn <strong>{{ price() || 0 }} points</strong>.
+          } @else {
+            If approved, you'll owe the claimant <strong>{{ rewardText() || 'the reward' }}</strong> (settled offline, no card payment) and they'll earn <strong>{{ points() || 0 }} points</strong>.
+          }
         </div>
 
         <div class="gap"></div>
@@ -82,6 +114,18 @@ const MAX_DESCRIPTION = 1000;
     .link.mute { color: var(--muted); }
 
     .gap { height: 14px; }
+
+    .seg {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+      background: var(--bg-2); border-radius: 12px; padding: 4px;
+    }
+    .seg-btn {
+      border: 0; background: transparent; cursor: pointer;
+      font-family: inherit; font-size: 13px; font-weight: 600;
+      color: var(--muted); padding: 8px 0; border-radius: 9px;
+      transition: background .15s ease, color .15s ease;
+    }
+    .seg-btn.on { background: var(--card); color: var(--ink); box-shadow: var(--shadow-1); }
 
     .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .price-input { position: relative; }
@@ -137,25 +181,35 @@ export class CreateBountyPage {
 
   protected readonly MAX_TITLE = MAX_TITLE;
   protected readonly MAX_DESCRIPTION = MAX_DESCRIPTION;
+  protected readonly MAX_REWARD = MAX_REWARD;
 
   private readonly params = toSignal(this.route.paramMap, { initialValue: this.route.snapshot.paramMap });
   protected group = computed(() => this.data.groupById(this.params().get('groupId') ?? ''));
 
   protected title = signal('');
   protected description = signal('');
+  protected rewardType = signal<'cash' | 'custom'>('cash');
   protected price = signal<number>(25);
+  protected rewardText = signal('');
+  protected points = signal<number>(25);
   protected expires = signal<string>('');
   protected proofRequired = signal(true);
   protected busy = signal(false);
 
   protected canSubmit = computed(() => {
     const t = this.title().trim();
+    if (this.busy() || t.length === 0 || t.length > MAX_TITLE
+      || this.description().length > MAX_DESCRIPTION || !this.expires()) {
+      return false;
+    }
+    if (this.rewardType() === 'custom') {
+      const r = this.rewardText().trim();
+      const pts = Number(this.points());
+      return r.length >= 1 && r.length <= MAX_REWARD
+        && Number.isInteger(pts) && pts >= 1 && pts <= MAX_POINTS;
+    }
     const p = Number(this.price());
-    return !this.busy()
-      && t.length > 0 && t.length <= MAX_TITLE
-      && this.description().length <= MAX_DESCRIPTION
-      && Number.isInteger(p) && p >= 1
-      && !!this.expires();
+    return Number.isInteger(p) && p >= 1;
   });
 
   constructor() {
@@ -181,11 +235,21 @@ export class CreateBountyPage {
     const expiresAt = new Date(this.expires() + 'T18:00:00');
     this.busy.set(true);
     try {
+      const isCustom = this.rewardType() === 'custom';
       const created = await this.data.postBounty({
         groupId: g.id,
         title: this.title().trim().slice(0, MAX_TITLE),
         description: this.description().trim().slice(0, MAX_DESCRIPTION),
-        price: Math.floor(Number(this.price())),
+        rewardType: this.rewardType(),
+        ...(isCustom
+          ? {
+            rewardText: this.rewardText().trim().slice(0, MAX_REWARD),
+            points: Math.floor(Number(this.points())),
+          }
+          : {
+            price: Math.floor(Number(this.price())),
+            points: Math.floor(Number(this.price())),
+          }),
         expiresAt,
       });
       this.router.navigate(['/g', g.id, 'b', created.id]);

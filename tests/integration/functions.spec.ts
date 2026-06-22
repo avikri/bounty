@@ -14,6 +14,7 @@ import {
   getDocs,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
   doc,
@@ -289,6 +290,80 @@ describe('approveBounty (→ successful)', () => {
   });
 });
 
+describe('approveBounty with a custom (non-cash) reward', () => {
+  /** Seed poster+claimant with a single available CUSTOM bounty. */
+  async function seedCustom(points = 40): Promise<Fixture> {
+    const poster = await createUser('Pat Poster');
+    const claimant = await createUser('Casey Claimant');
+    const { groupId, inviteCode } = await poster.call<{
+      groupId: string; inviteCode: string;
+    }>('createGroup', { name: 'Roomies' });
+    await claimant.call('joinGroup', { inviteCode });
+
+    const ref = await addDoc(
+      collection(poster.db, 'groups', groupId, 'bounties'),
+      {
+        title: 'First round',
+        description: 'winner picks the bar',
+        rewardType: 'custom',
+        rewardText: '3 beers',
+        points,
+        currency: 'NZD',
+        state: 'available',
+        posterId: poster.uid,
+        claimantId: null,
+        expiresAt: Timestamp.fromDate(new Date(Date.now() + WEEK_MS)),
+        createdAt: serverTimestamp(),
+      },
+    );
+    return { poster, claimant, groupId, bountyId: ref.id };
+  }
+
+  it('awards the bounty points and creates a manual-only custom IOU (no money)', async () => {
+    const f = await seedCustom(40);
+    await f.claimant.call('claimBounty', { groupId: f.groupId, bountyId: f.bountyId });
+    await f.claimant.call('submitProof', {
+      groupId: f.groupId, bountyId: f.bountyId, proof: { urls: [], note: 'done' },
+    });
+    await f.poster.call('approveBounty', { groupId: f.groupId, bountyId: f.bountyId });
+
+    // Points come from `points`, not a dollar price.
+    const member = await getDoc(
+      doc(f.poster.db, 'groups', f.groupId, 'members', f.claimant.uid),
+    );
+    expect(member.data()?.['points']).toBe(40);
+    expect(member.data()?.['wins']).toBe(1);
+
+    // The IOU carries the custom reward, has no monetary amount, and is open.
+    const ious = await getDocs(
+      query(collection(f.poster.db, 'ious'), where('debtorId', '==', f.poster.uid)),
+    );
+    expect(ious.size).toBe(1);
+    const iou = ious.docs[0]!.data();
+    expect(iou['rewardType']).toBe('custom');
+    expect(iou['rewardText']).toBe('3 beers');
+    expect(iou['amount']).toBe(0);
+    expect(iou['status']).toBe('open');
+  });
+
+  it('settles a custom IOU manually via the two-party handshake', async () => {
+    const f = await seedCustom(40);
+    await f.claimant.call('claimBounty', { groupId: f.groupId, bountyId: f.bountyId });
+    await f.claimant.call('submitProof', {
+      groupId: f.groupId, bountyId: f.bountyId, proof: { urls: [], note: 'done' },
+    });
+    await f.poster.call('approveBounty', { groupId: f.groupId, bountyId: f.bountyId });
+    const ious = await getDocs(
+      query(collection(f.poster.db, 'ious'), where('debtorId', '==', f.poster.uid)),
+    );
+    const iouId = ious.docs[0]!.id;
+
+    await f.poster.call('markIouPaid', { iouId });
+    const res = await f.claimant.call<{ settled: boolean }>('markIouPaid', { iouId });
+    expect(res.settled).toBe(true);
+  });
+});
+
 describe('rejectBounty (→ failed)', () => {
   it('docks points, records a loss, stores the reason and notifies the claimant', async () => {
     const f = await seed(6);
@@ -486,6 +561,204 @@ describe('markIouPaid two-party handshake', () => {
       f.poster.call('markIouPaid', { iouId }),
       'failed-precondition',
     );
+  });
+});
+
+describe('contributeToBounty (pooled cash bounties)', () => {
+  /** Read every contribution doc for a bounty as a uid → amount map. */
+  async function contributions(f: Fixture): Promise<Record<string, number>> {
+    const snap = await getDocs(
+      collection(f.poster.db, 'groups', f.groupId, 'bounties', f.bountyId, 'contributions'),
+    );
+    const out: Record<string, number> = {};
+    for (const d of snap.docs) out[d.id] = d.data()['amount'] as number;
+    return out;
+  }
+  async function price(f: Fixture): Promise<{ price: number; points: number }> {
+    const snap = await getDoc(
+      doc(f.poster.db, 'groups', f.groupId, 'bounties', f.bountyId),
+    );
+    return { price: snap.data()?.['price'], points: snap.data()?.['points'] };
+  }
+
+  it('raises the total and seeds/accumulates contribution docs', async () => {
+    const f = await seed(5); // poster stake $5
+
+    // Poster pools $5 onto their own bounty → their stake doc becomes $10.
+    const r1 = await f.poster.call<{ total: number }>('contributeToBounty', {
+      groupId: f.groupId, bountyId: f.bountyId, amount: 5,
+    });
+    expect(r1.total).toBe(10);
+    expect(await price(f)).toEqual({ price: 10, points: 10 });
+    expect(await contributions(f)).toEqual({ [f.poster.uid]: 10 });
+
+    // A different member adds $3 → new contributor doc, total $13.
+    const r2 = await f.claimant.call<{ total: number }>('contributeToBounty', {
+      groupId: f.groupId, bountyId: f.bountyId, amount: 3,
+    });
+    expect(r2.total).toBe(13);
+    expect(await price(f)).toEqual({ price: 13, points: 13 });
+    expect(await contributions(f)).toEqual({
+      [f.poster.uid]: 10,
+      [f.claimant.uid]: 3,
+    });
+
+    // Repeat add from the same contributor accumulates into one doc.
+    await f.claimant.call('contributeToBounty', {
+      groupId: f.groupId, bountyId: f.bountyId, amount: 2,
+    });
+    expect((await contributions(f))[f.claimant.uid]).toBe(5);
+    expect((await price(f)).price).toBe(15);
+  });
+
+  it('rejects pooling once the bounty is claimed (non-available)', async () => {
+    const f = await seed(5);
+    await f.claimant.call('claimBounty', { groupId: f.groupId, bountyId: f.bountyId });
+    await expectReject(
+      f.poster.call('contributeToBounty', {
+        groupId: f.groupId, bountyId: f.bountyId, amount: 5,
+      }),
+      'failed-precondition',
+    );
+  });
+
+  it('rejects a non-member contributor', async () => {
+    const f = await seed(5);
+    const stranger = await createUser('Stranger');
+    await expectReject(
+      stranger.call('contributeToBounty', {
+        groupId: f.groupId, bountyId: f.bountyId, amount: 5,
+      }),
+      'permission-denied',
+    );
+  });
+
+  it('rejects out-of-bounds and non-integer amounts', async () => {
+    const f = await seed(5);
+    for (const amount of [0, -3, 5.5, 100001]) {
+      await expectReject(
+        f.poster.call('contributeToBounty', {
+          groupId: f.groupId, bountyId: f.bountyId, amount,
+        }),
+        'invalid-argument',
+      );
+    }
+    // Nothing was written.
+    expect(await contributions(f)).toEqual({});
+  });
+
+  it('rejects pooling onto a custom (non-cash) bounty', async () => {
+    const poster = await createUser('Pat Poster');
+    const member = await createUser('Mel Member');
+    const { groupId, inviteCode } = await poster.call<{
+      groupId: string; inviteCode: string;
+    }>('createGroup', { name: 'Roomies' });
+    await member.call('joinGroup', { inviteCode });
+    const ref = await addDoc(collection(poster.db, 'groups', groupId, 'bounties'), {
+      title: 'Beers', description: 'x', rewardType: 'custom', rewardText: '3 beers',
+      points: 40, currency: 'NZD', state: 'available', posterId: poster.uid,
+      claimantId: null, expiresAt: Timestamp.fromDate(new Date(Date.now() + WEEK_MS)),
+      createdAt: serverTimestamp(),
+    });
+    await expectReject(
+      poster.call('contributeToBounty', { groupId, bountyId: ref.id, amount: 5 }),
+      'failed-precondition',
+    );
+  });
+
+  it('denies a direct client write to the contributions subcollection', async () => {
+    const f = await seed(5);
+    await expectReject(
+      setDoc(
+        doc(f.poster.db, 'groups', f.groupId, 'bounties', f.bountyId, 'contributions', f.poster.uid),
+        { uid: f.poster.uid, amount: 999 },
+      ),
+    );
+  });
+});
+
+describe('approveBounty with pooled contributions', () => {
+  it('creates one correctly-attributed IOU per contributor and awards the full total', async () => {
+    // poster ($10 stake) + two extra contributors + a separate claimant.
+    const poster = await createUser('Pat Poster');
+    const claimant = await createUser('Casey Claimant');
+    const alice = await createUser('Alice Add');
+    const bob = await createUser('Bob Add');
+    const { groupId, inviteCode } = await poster.call<{
+      groupId: string; inviteCode: string;
+    }>('createGroup', { name: 'Roomies' });
+    for (const u of [claimant, alice, bob]) await u.call('joinGroup', { inviteCode });
+
+    const ref = await addDoc(collection(poster.db, 'groups', groupId, 'bounties'), {
+      title: 'Big chore', description: 'x', price: 10, currency: 'NZD',
+      state: 'available', posterId: poster.uid, claimantId: null,
+      expiresAt: Timestamp.fromDate(new Date(Date.now() + WEEK_MS)),
+      createdAt: serverTimestamp(),
+    });
+    const bountyId = ref.id;
+
+    await alice.call('contributeToBounty', { groupId, bountyId, amount: 5 });
+    await bob.call('contributeToBounty', { groupId, bountyId, amount: 7 });
+    // total = 10 (poster) + 5 + 7 = 22
+
+    await claimant.call('claimBounty', { groupId, bountyId });
+    await claimant.call('submitProof', { groupId, bountyId, proof: { urls: [], note: 'done' } });
+    await poster.call('approveBounty', { groupId, bountyId });
+
+    // Three IOUs, all owed to the claimant, one per contributor for their share.
+    const ious = await getDocs(
+      query(collection(claimant.db, 'ious'), where('creditorId', '==', claimant.uid)),
+    );
+    expect(ious.size).toBe(3);
+    const byDebtor: Record<string, number> = {};
+    for (const d of ious.docs) {
+      expect(d.data()['status']).toBe('open');
+      byDebtor[d.data()['debtorId'] as string] = d.data()['amount'] as number;
+    }
+    expect(byDebtor).toEqual({
+      [poster.uid]: 10,
+      [alice.uid]: 5,
+      [bob.uid]: 7,
+    });
+
+    // Claimant earns the full pooled total in points (1pt = NZ$1).
+    const member = await getDoc(doc(poster.db, 'groups', groupId, 'members', claimant.uid));
+    expect(member.data()?.['points']).toBe(22);
+    expect(member.data()?.['wins']).toBe(1);
+  });
+
+  it('a never-pooled cash bounty still produces exactly one IOU (today\'s behaviour)', async () => {
+    const f = await seed(8);
+    await f.claimant.call('claimBounty', { groupId: f.groupId, bountyId: f.bountyId });
+    await f.claimant.call('submitProof', { groupId: f.groupId, bountyId: f.bountyId, proof: { urls: [], note: 'done' } });
+    await f.poster.call('approveBounty', { groupId: f.groupId, bountyId: f.bountyId });
+
+    const ious = await getDocs(
+      query(collection(f.poster.db, 'ious'), where('debtorId', '==', f.poster.uid)),
+    );
+    expect(ious.size).toBe(1);
+    expect(ious.docs[0]!.data()['amount']).toBe(8);
+  });
+
+  it('rejecting a pooled bounty creates no IOUs and leaves contributions as a record', async () => {
+    const f = await seed(5);
+    await f.claimant.call('contributeToBounty', { groupId: f.groupId, bountyId: f.bountyId, amount: 4 });
+    await f.claimant.call('claimBounty', { groupId: f.groupId, bountyId: f.bountyId });
+    await f.claimant.call('submitProof', { groupId: f.groupId, bountyId: f.bountyId, proof: { urls: [], note: 'done' } });
+    await f.poster.call('rejectBounty', { groupId: f.groupId, bountyId: f.bountyId, reason: 'nope' });
+
+    // Query by debtorId as the poster — a rules-safe query (each party may only
+    // list IOUs they're a party to). No IOUs exist after a rejection anyway.
+    const ious = await getDocs(
+      query(collection(f.poster.db, 'ious'), where('debtorId', '==', f.poster.uid)),
+    );
+    expect(ious.size).toBe(0);
+
+    // Contribution docs survive as historical record.
+    const contribs = await getDocs(
+      collection(f.poster.db, 'groups', f.groupId, 'bounties', f.bountyId, 'contributions'),
+    );
+    expect(contribs.size).toBe(2);
   });
 });
 

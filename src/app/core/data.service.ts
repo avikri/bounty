@@ -5,6 +5,7 @@ import {
   addDoc,
   collection,
   collectionData,
+  deleteDoc,
   doc,
   docData,
   limit,
@@ -26,6 +27,10 @@ import {
   AppNotification,
   Bounty,
   BountyState,
+  Comment,
+  ConnectAccountStatus,
+  Contribution,
+  CreateIouPaymentIntentResult,
   Group,
   IOU,
   LeaderboardEntry,
@@ -34,6 +39,8 @@ import {
 } from './models';
 import {
   BountyDoc,
+  CommentDoc,
+  ContributionDoc,
   GroupDoc,
   IouDoc,
   MemberDoc,
@@ -41,6 +48,8 @@ import {
   PLACEHOLDER_USER,
   initialsOf,
   mapBounty,
+  mapComment,
+  mapContribution,
   mapGroup,
   mapIou,
   mapMember,
@@ -67,12 +76,20 @@ export class DataService {
   private readonly _bounties = signal<Bounty[]>([]);
   private readonly _ious     = signal<IOU[]>([]);
   private readonly _notifications = signal<AppNotification[]>([]);
+  /** Runtime card-payments kill-switch (config/payments). Default OFF. */
+  private readonly _cardPaymentsEnabled = signal(false);
 
   readonly users    = this._users.asReadonly();
   readonly groups   = this._groups.asReadonly();
   readonly bounties = this._bounties.asReadonly();
   readonly ious     = this._ious.asReadonly();
   readonly notifications = this._notifications.asReadonly();
+  /**
+   * Whether the card-payment path is turned on server-side. Driven by a live
+   * listener on config/payments, so flipping the flag shows/hides the card
+   * option immediately — no redeploy, no reload. The cash path ignores this.
+   */
+  readonly cardPaymentsEnabled = this._cardPaymentsEnabled.asReadonly();
   readonly unreadCount = computed(() => this._notifications().filter((n) => !n.read).length);
 
   get currentUserId(): string {
@@ -96,6 +113,18 @@ export class DataService {
       this.teardown();
       if (uid) this.bootstrap(uid);
     }, { allowSignalWrites: true });
+
+    // Always-on listener for the global payments kill-switch — independent of
+    // auth (config/payments is publicly readable) so the card path tracks the
+    // flag live. Missing doc / read error → OFF (card path stays hidden).
+    onSnapshot(
+      doc(this.firestore, 'config', 'payments'),
+      (snap) => this._cardPaymentsEnabled.set(
+        (snap.data() as { stripePaymentsEnabled?: boolean } | undefined)
+          ?.stripePaymentsEnabled === true,
+      ),
+      () => this._cardPaymentsEnabled.set(false),
+    );
   }
 
   private bootstrap(uid: string): void {
@@ -419,9 +448,18 @@ export class DataService {
 
   /* ── Mutations ───────────────────────────────────────────────────── */
 
-  /** Direct write — spec allows clients to create bounties in `available` state. */
+  /**
+   * Direct write — spec allows clients to create bounties in `available` state.
+   * Either a `cash` reward (integer dollar `price`, `points` pinned to it) or a
+   * `custom` reward (freeform `rewardText`, poster-chosen `points`). The shape
+   * is mirror-validated server-side in firestore.rules.
+   */
   async postBounty(input: {
-    groupId: string; title: string; description: string; price: number;
+    groupId: string; title: string; description: string;
+    rewardType: 'cash' | 'custom';
+    /** cash only */ price?: number;
+    /** custom only */ rewardText?: string;
+    points: number;
     expiresAt: Date; currency?: string;
   }): Promise<Bounty> {
     const uid = this.currentUserId;
@@ -429,25 +467,51 @@ export class DataService {
     if (!input.title.trim()) throw new Error('Title required');
     if (input.title.length > 80) throw new Error('Title must be 80 characters or fewer');
     if (input.description.length > 1000) throw new Error('Description must be 1000 characters or fewer');
-    if (!Number.isInteger(input.price) || input.price < 1) throw new Error('Price must be a positive integer');
-    const ref = collection(this.firestore, 'groups', input.groupId, 'bounties');
-    const docRef = await addDoc(ref, {
+
+    const isCustom = input.rewardType === 'custom';
+    let price = 0;
+    let rewardText: string | undefined;
+    if (isCustom) {
+      rewardText = (input.rewardText ?? '').trim();
+      if (rewardText.length < 1 || rewardText.length > 10) {
+        throw new Error('Reward must be between 1 and 10 characters');
+      }
+      if (!Number.isInteger(input.points) || input.points < 1 || input.points > 1000) {
+        throw new Error('Points must be a whole number between 1 and 1000');
+      }
+    } else {
+      price = Number(input.price);
+      if (!Number.isInteger(price) || price < 1) throw new Error('Price must be a positive integer');
+      // cash points are pinned to the dollar price (1 point = NZ$1).
+      input = { ...input, points: price };
+    }
+
+    const docData: Record<string, unknown> = {
       title: input.title,
       description: input.description,
-      price: input.price,
-      currency: input.currency ?? 'USD',
+      rewardType: input.rewardType,
+      points: input.points,
+      currency: input.currency ?? 'NZD',
       state: 'available' as BountyState,
       posterId: uid,
       claimantId: null,
       expiresAt: Timestamp.fromDate(input.expiresAt),
       createdAt: serverTimestamp(),
-    });
+    };
+    if (isCustom) docData['rewardText'] = rewardText;
+    else docData['price'] = price;
+
+    const ref = collection(this.firestore, 'groups', input.groupId, 'bounties');
+    const docRef = await addDoc(ref, docData);
     return {
       id: docRef.id,
       groupId: input.groupId,
       title: input.title,
       description: input.description,
-      price: input.price,
+      rewardType: input.rewardType,
+      price,
+      rewardText,
+      points: input.points,
       state: 'available',
       posterId: uid,
       claimantId: null,
@@ -461,6 +525,22 @@ export class DataService {
     const b = this.bountyById(bountyId);
     if (!b) return Promise.resolve();
     return this.callable('claimBounty', { groupId: b.groupId, bountyId });
+  }
+
+  /**
+   * Pool money onto an `available` cash bounty, raising its total. Restricted
+   * server-side to cash bounties in `available` state and to group members; the
+   * running total is mutated only inside the callable's transaction (the
+   * `bounties.update` rule stays `false`). Returns the new live total.
+   */
+  contributeToBounty(bountyId: string, amount: number): Promise<{ total: number }> {
+    const b = this.bountyById(bountyId);
+    if (!b) return Promise.reject(new Error('Bounty not found'));
+    return this.callableRaw<
+      { groupId: string; bountyId: string; amount: number },
+      { ok: boolean; total: number }
+    >('contributeToBounty', { groupId: b.groupId, bountyId, amount })
+      .then((r) => ({ total: r.total }));
   }
 
   /**
@@ -534,6 +614,40 @@ export class DataService {
     return this.callableRaw<{ iouId: string }, { settled: boolean }>('markIouPaid', { iouId });
   }
 
+  /* ── Stripe card-payment callables ───────────────────────────────── */
+
+  /**
+   * Ask the backend to build a destination-charge PaymentIntent so the debtor
+   * can settle this IOU by card. Returns either an `ok` result carrying the
+   * per-payment `clientSecret` to confirm with Stripe.js, or
+   * `creditor_not_onboarded` — in which case the backend has already flagged the
+   * IOU as awaiting onboarding and notified the creditor (the UI shows a waiting
+   * state and the cash path stays available).
+   */
+  createIouPaymentIntent(iouId: string): Promise<CreateIouPaymentIntentResult> {
+    return this.callableRaw<{ iouId: string }, CreateIouPaymentIntentResult>(
+      'createIouPaymentIntent', { iouId },
+    );
+  }
+
+  /**
+   * Lazily create the caller's NZ Express connected account (if absent) and
+   * return a fresh Stripe-hosted onboarding link. Called on demand — only when
+   * a card payment is actually pending on one of the creditor's IOUs.
+   */
+  createConnectAccountAndOnboardingLink(): Promise<{ url: string; accountId: string }> {
+    return this.callableRaw<Record<string, never>, { url: string; accountId: string }>(
+      'createConnectAccountAndOnboardingLink', {},
+    );
+  }
+
+  /** Refresh and report whether the caller's connected account can receive funds. */
+  getConnectAccountStatus(): Promise<ConnectAccountStatus> {
+    return this.callableRaw<Record<string, never>, ConnectAccountStatus>(
+      'getConnectAccountStatus', {},
+    );
+  }
+
   /** Mark a single notification read (rules allow self-update of `read`). */
   async markNotificationRead(nid: string): Promise<void> {
     const uid = this.currentUserId;
@@ -577,6 +691,21 @@ export class DataService {
     return this.membersByGroup.get(groupId) ?? [];
   }
 
+  /**
+   * Live contributor list for a bounty (largest stake first). Member-readable;
+   * used by the detail page to show who has pooled how much.
+   */
+  getContributions(groupId: string, bountyId: string): Observable<Contribution[]> {
+    const ref = collection(
+      this.firestore,
+      'groups', groupId, 'bounties', bountyId, 'contributions',
+    );
+    return (collectionData(ref, { idField: 'id' }) as Observable<Array<ContributionDoc & { id: string }>>)
+      .pipe(map((arr) => arr
+        .map((d) => mapContribution(d.id, d))
+        .sort((a, b) => b.amount - a.amount)));
+  }
+
   /** Live activity timeline for a bounty (chronological). */
   getActivity(groupId: string, bountyId: string): Observable<ActivityEvent[]> {
     const ref = collection(
@@ -586,7 +715,7 @@ export class DataService {
     const q = query(ref, orderBy('at', 'asc'));
     return (collectionData(q, { idField: 'id' }) as Observable<Array<{
       id: string; kind: ActivityEvent['kind']; actorId: string;
-      at: Timestamp; note?: string;
+      at: Timestamp; note?: string; amount?: number;
     }>>).pipe(
       map((arr) => arr.map((d) => ({
         id: d.id,
@@ -595,7 +724,66 @@ export class DataService {
         actorId: d.actorId,
         at: toDate(d.at),
         note: d.note,
+        amount: d.amount,
       }))),
+    );
+  }
+
+  /* ── Comments ─────────────────────────────────────────────────────
+   * Direct client writes to groups/{gid}/bounties/{bid}/comments, governed by
+   * strict firestore.rules (field allowlist + length bounds), mirroring the
+   * bounty-creation precedent rather than a callable. Real-time via
+   * collectionData; oldest→newest so the thread reads top to bottom. */
+
+  /** Live comment thread for a bounty, oldest first. Member-readable. */
+  getComments(groupId: string, bountyId: string): Observable<Comment[]> {
+    const ref = collection(
+      this.firestore,
+      'groups', groupId, 'bounties', bountyId, 'comments',
+    );
+    const q = query(ref, orderBy('createdAt', 'asc'));
+    return (collectionData(q, { idField: 'id' }) as Observable<Array<CommentDoc & { id: string }>>)
+      .pipe(map((arr) => arr.map((d) => mapComment(d.id, d))));
+  }
+
+  /**
+   * Post a comment. The field set + bounds are mirror-validated in
+   * firestore.rules; authorDisplayName is denormalized from the signed-in user.
+   */
+  async postComment(groupId: string, bountyId: string, text: string): Promise<void> {
+    const uid = this.currentUserId;
+    if (!uid) throw new Error('Not signed in');
+    const trimmed = text.trim();
+    if (trimmed.length < 1 || trimmed.length > 500) {
+      throw new Error('Comment must be between 1 and 500 characters');
+    }
+    await addDoc(
+      collection(this.firestore, 'groups', groupId, 'bounties', bountyId, 'comments'),
+      {
+        authorUid: uid,
+        authorDisplayName: this.me().displayName || 'Someone',
+        text: trimmed,
+        createdAt: serverTimestamp(),
+      },
+    );
+  }
+
+  /** Edit one's own comment (rules allow author-only text + editedAt change). */
+  async editComment(groupId: string, bountyId: string, commentId: string, text: string): Promise<void> {
+    const trimmed = text.trim();
+    if (trimmed.length < 1 || trimmed.length > 500) {
+      throw new Error('Comment must be between 1 and 500 characters');
+    }
+    await updateDoc(
+      doc(this.firestore, 'groups', groupId, 'bounties', bountyId, 'comments', commentId),
+      { text: trimmed, editedAt: serverTimestamp() },
+    );
+  }
+
+  /** Delete a comment. Rules permit the author, the bounty poster, or the owner. */
+  async deleteComment(groupId: string, bountyId: string, commentId: string): Promise<void> {
+    await deleteDoc(
+      doc(this.firestore, 'groups', groupId, 'bounties', bountyId, 'comments', commentId),
     );
   }
 

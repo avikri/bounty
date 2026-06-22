@@ -12,10 +12,8 @@
  * machine, so a transient failure shouldn't roll back the resolution.
  */
 
-import {setGlobalOptions} from "firebase-functions";
-import {HttpsError, onCall, CallableRequest} from "firebase-functions/v2/https";
+import {HttpsError, onCall} from "firebase-functions/v2/https";
 import {onSchedule} from "firebase-functions/v2/scheduler";
-import * as admin from "firebase-admin";
 // Pull Timestamp/FieldValue from the modular entry point rather than off
 // `admin.firestore.*`. The Functions emulator wraps `admin.firestore()` to
 // auto-connect to the local emulator, and that wrapper drops the static
@@ -26,26 +24,33 @@ import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 import {randomInt} from "node:crypto";
 import {runBountyExpiry} from "./expiry";
-
-admin.initializeApp();
-const db = admin.firestore();
-
-setGlobalOptions({maxInstances: 10, region: "australia-southeast1"});
-
-// App Check enforcement on the callables. OFF by default so the app works
-// without a reCAPTCHA/App Check provider configured. To turn it on later:
-//   1. Configure client App Check (initializeAppCheck with a real site key).
-//   2. Set ENFORCE_APP_CHECK=true (e.g. in functions/.env) and redeploy.
-// Never enforced under the emulator — App Check can't be attested locally
-// (the emulator sets FUNCTIONS_EMULATOR=true), which would break the suites.
-const ENFORCE_APP_CHECK =
-  process.env.FUNCTIONS_EMULATOR !== "true" &&
-  process.env.ENFORCE_APP_CHECK === "true";
-const CALLABLE_OPTS = {enforceAppCheck: ENFORCE_APP_CHECK};
+// `./shared` owns admin.initializeApp() + setGlobalOptions and the auth /
+// rate-limit / inbox helpers shared with the Stripe functions. Import it
+// first so process setup runs before any function below is defined.
+import {
+  db,
+  CALLABLE_OPTS,
+  requireAuth,
+  requireString,
+  enforceRateLimit,
+  writeInbox,
+  memberName,
+  userName,
+} from "./shared";
+// Re-export the Stripe Connect payment functions so the Functions runtime
+// discovers them from the single index entry point.
+export * from "./stripe";
 
 const MAX_LEADERBOARD_ENTRIES = 100;
 const MAX_PROOF_NOTE_CHARS = 500;
 const MAX_REJECTION_REASON_CHARS = 500;
+
+// Per-contribution money bounds, in whole NZD dollars. These mirror the cash
+// `price` bounds enforced for bounty creation in firestore.rules (1..100000) so
+// a contribution can't push a bounty total past what the create rule would have
+// allowed for a single stake.
+const MIN_CONTRIBUTION = 1;
+const MAX_CONTRIBUTION = 100000;
 
 /* ── shared types ─────────────────────────────────────────────────── */
 
@@ -56,7 +61,10 @@ type BountyState =
 interface BountyData {
   title: string;
   description: string;
-  price: number;
+  price?: number;
+  rewardType?: "cash" | "custom";
+  rewardText?: string;
+  points?: number;
   state: BountyState;
   posterId: string;
   claimantId?: string | null;
@@ -65,6 +73,22 @@ interface BountyData {
   createdAt: Timestamp;
   resolvedAt?: Timestamp;
   rejectionReason?: string;
+}
+
+/**
+ * One pooled stake on a cash bounty, at
+ * `groups/{gid}/bounties/{bid}/contributions/{contributorUid}`. Keyed by the
+ * contributor's uid so repeat adds from the same person accumulate into one
+ * record. `amount` is whole NZD dollars (same unit as `bounty.price` and
+ * `iou.amount`). The poster's original stake is seeded as a contribution doc on
+ * the first pool, so the bounty total is exactly the sum of all `amount`s.
+ */
+interface ContributionData {
+  uid: string;
+  displayName?: string;
+  amount: number;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }
 
 interface MemberData {
@@ -87,10 +111,14 @@ interface LeaderboardEntry {
 
 /* ── helpers ──────────────────────────────────────────────────────── */
 
-function requireAuth(req: CallableRequest<unknown>): string {
-  const uid = req.auth?.uid;
-  if (!uid) throw new HttpsError("unauthenticated", "Sign-in required.");
-  return uid;
+/**
+ * Leaderboard points a bounty awards on approval / docks on rejection.
+ * Decoupled from the reward: cash bounties pin `points` to the dollar price,
+ * custom bounties carry a poster-set value. Falls back to `price` for
+ * pre-feature docs that predate the `points` field.
+ */
+function bountyPoints(b: BountyData): number {
+  return b.points ?? b.price ?? 0;
 }
 
 async function requireMembership(groupId: string, uid: string): Promise<void> {
@@ -98,67 +126,6 @@ async function requireMembership(groupId: string, uid: string): Promise<void> {
   if (!memberSnap.exists) {
     throw new HttpsError("permission-denied", "Not a member of this group.");
   }
-}
-
-function requireString(value: unknown, name: string): string {
-  if (typeof value !== "string" || value.length === 0) {
-    throw new HttpsError("invalid-argument", `${name} required.`);
-  }
-  return value;
-}
-
-/* ── rate limiting ────────────────────────────────────────────────── */
-
-interface RateRule { max: number; windowSec: number; }
-
-// Per-user fixed-window caps — generous for real use, tight enough to stop
-// tight-loop abuse / cost amplification (esp. unbounded group creation and
-// invite-code brute-forcing). Counters live in rateLimits/{uid}, which is
-// Cloud-Function-only (denied to clients by firestore.rules).
-const RATE_RULES: Record<string, RateRule> = {
-  createGroup: {max: 10, windowSec: 3600},
-  joinGroup: {max: 20, windowSec: 3600},
-  regenerateInviteCode: {max: 20, windowSec: 3600},
-  claimBounty: {max: 60, windowSec: 3600},
-  submitProof: {max: 60, windowSec: 3600},
-  approveBounty: {max: 120, windowSec: 3600},
-  rejectBounty: {max: 120, windowSec: 3600},
-  markIouPaid: {max: 120, windowSec: 3600},
-};
-
-/**
- * Fixed-window per-user rate limit. Throws `resource-exhausted` once a user
- * exceeds the configured number of calls for `action` within its window.
- */
-async function enforceRateLimit(uid: string, action: string): Promise<void> {
-  const rule = RATE_RULES[action];
-  if (!rule) return;
-  const ref = db.doc(`rateLimits/${uid}`);
-  const nowMs = Date.now();
-  const windowMs = rule.windowSec * 1000;
-
-  await db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const all = (snap.exists ? snap.data() : {}) as
-      Record<string, { count: number; windowStart: number } | undefined>;
-    const bucket = all[action];
-
-    if (!bucket || nowMs - bucket.windowStart >= windowMs) {
-      tx.set(ref, {[action]: {count: 1, windowStart: nowMs}}, {merge: true});
-      return;
-    }
-    if (bucket.count >= rule.max) {
-      throw new HttpsError(
-          "resource-exhausted",
-          "Too many requests — please slow down and try again later.",
-      );
-    }
-    tx.set(
-        ref,
-        {[action]: {count: bucket.count + 1, windowStart: bucket.windowStart}},
-        {merge: true},
-    );
-  });
 }
 
 /** Insert or replace an entry, then sort by points desc and cap. */
@@ -170,41 +137,6 @@ function upsertLeaderboardEntry(
   next.push(entry);
   next.sort((a, b) => (b.points ?? 0) - (a.points ?? 0));
   return next.slice(0, MAX_LEADERBOARD_ENTRIES);
-}
-
-async function writeInbox(
-    userId: string,
-    payload: Record<string, unknown>,
-): Promise<void> {
-  try {
-    await db.collection(`notifications/${userId}/inbox`).add({
-      ...payload,
-      createdAt: Timestamp.now(),
-      read: false,
-    });
-  } catch (e) {
-    logger.warn("inbox write failed", {userId, error: String(e)});
-  }
-}
-
-/** Best-effort lookup of a member's cached display name within a group. */
-async function memberName(groupId: string, uid: string): Promise<string> {
-  try {
-    const snap = await db.doc(`groups/${groupId}/members/${uid}`).get();
-    return (snap.data()?.displayName as string | undefined) || "Someone";
-  } catch {
-    return "Someone";
-  }
-}
-
-/** Best-effort lookup of a top-level user's display name. */
-async function userName(uid: string): Promise<string> {
-  try {
-    const snap = await db.doc(`users/${uid}`).get();
-    return (snap.data()?.displayName as string | undefined) || "Someone";
-  } catch {
-    return "Someone";
-  }
 }
 
 /* ── claimBounty ──────────────────────────────────────────────────── */
@@ -345,6 +277,143 @@ export const submitProof = onCall(CALLABLE_OPTS, async (req) => {
   return {ok: true};
 });
 
+/* ── contributeToBounty ───────────────────────────────────────────── */
+
+/**
+ * Pool money onto an `available` **cash** bounty, raising its total. Any group
+ * member — including the poster again — may add to the pot before the bounty is
+ * claimed; once claimed (or otherwise resolved) this rejects. Each contribution
+ * is recorded per-contributor so that on approval every contributor owes the
+ * claimant exactly their own share (see approveBounty).
+ *
+ * The bounty total is the live `price` field (whole NZD dollars), kept equal to
+ * the sum of the contribution docs and with `points` pinned to it (1pt = NZ$1).
+ * The poster's original stake is implicit in `price` until the first pool, at
+ * which point it's materialised as the poster's own contribution doc so the
+ * "total === sum(contributions)" invariant holds from then on.
+ */
+export const contributeToBounty = onCall(CALLABLE_OPTS, async (req) => {
+  const uid = requireAuth(req);
+  await enforceRateLimit(uid, "contributeToBounty");
+  const data = (req.data ?? {}) as {
+    groupId?: string; bountyId?: string; amount?: unknown;
+  };
+  const groupId = requireString(data.groupId, "groupId");
+  const bountyId = requireString(data.bountyId, "bountyId");
+  const amount = data.amount;
+  if (typeof amount !== "number" || !Number.isInteger(amount) ||
+      amount < MIN_CONTRIBUTION || amount > MAX_CONTRIBUTION) {
+    throw new HttpsError(
+        "invalid-argument",
+        `amount must be a whole dollar value between ${MIN_CONTRIBUTION} ` +
+        `and ${MAX_CONTRIBUTION}.`,
+    );
+  }
+  // Caller must be a member of the bounty's group (mirrors the other callables).
+  await requireMembership(groupId, uid);
+
+  const bountyRef = db.doc(`groups/${groupId}/bounties/${bountyId}`);
+  const activityRef = db
+      .collection(`groups/${groupId}/bounties/${bountyId}/activity`)
+      .doc();
+
+  const result = await db.runTransaction(async (tx) => {
+    const bountySnap = await tx.get(bountyRef);
+    if (!bountySnap.exists) {
+      throw new HttpsError("not-found", "Bounty not found.");
+    }
+    const bounty = bountySnap.data() as BountyData;
+
+    // Pooling is cash-only: a custom reward ("3 beers") has no divisible amount.
+    if (bounty.rewardType === "custom") {
+      throw new HttpsError(
+          "failed-precondition",
+          "Only cash bounties can be added to.",
+      );
+    }
+    // Money only moves at approval, so pooling is closed once a bounty leaves
+    // `available` (a claim, resolution, or expiry all end the window).
+    if (bounty.state !== "available") {
+      throw new HttpsError(
+          "failed-precondition",
+          `Cannot add to a bounty in state '${bounty.state}'.`,
+      );
+    }
+
+    const posterId = bounty.posterId;
+    const total = bounty.price ?? 0;
+
+    const posterRef = bountyRef.collection("contributions").doc(posterId);
+    const callerRef = bountyRef.collection("contributions").doc(uid);
+    const callerMemberRef = db.doc(`groups/${groupId}/members/${uid}`);
+
+    // All reads first (Firestore requires reads before writes).
+    const posterSnap = await tx.get(posterRef);
+    const callerSnap = uid === posterId ? posterSnap : await tx.get(callerRef);
+    const callerMemberSnap = await tx.get(callerMemberRef);
+    // The poster's display name is only needed when seeding their stake doc.
+    const seedPoster = !posterSnap.exists && uid !== posterId;
+    const posterMemberSnap = seedPoster ?
+      await tx.get(db.doc(`groups/${groupId}/members/${posterId}`)) :
+      null;
+
+    /* ── all reads done; now writes ── */
+
+    const now = Timestamp.now();
+    const callerName =
+      (callerMemberSnap.data()?.displayName as string | undefined) ?? "";
+
+    // First pool ever: materialise the poster's original stake (== the current
+    // total) as a contribution doc so totals stay = sum(contributions). Missing
+    // poster doc ⟺ no contributions yet ⟺ price is still the original stake.
+    if (seedPoster) {
+      tx.set(posterRef, {
+        uid: posterId,
+        displayName:
+          (posterMemberSnap?.data()?.displayName as string | undefined) ?? "",
+        amount: total,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    // The caller's prior stake. When the poster pools for the first time their
+    // own doc doesn't exist yet but the original stake is baked into `total`.
+    const callerPrev = callerSnap.exists ?
+      ((callerSnap.data()?.amount as number | undefined) ?? 0) :
+      (uid === posterId ? total : 0);
+    const callerCreatedAt = callerSnap.exists ?
+      ((callerSnap.data()?.createdAt as Timestamp | undefined) ?? now) :
+      now;
+
+    tx.set(callerRef, {
+      uid,
+      displayName: callerName,
+      amount: callerPrev + amount,
+      createdAt: callerCreatedAt,
+      updatedAt: now,
+    });
+
+    const newTotal = total + amount;
+    // `price` is the live total; `points` stays pinned to it (1pt = NZ$1) so the
+    // leaderboard award on approval reflects the full pooled value.
+    tx.update(bountyRef, {price: newTotal, points: newTotal});
+
+    // Activity event is a post-commit-style side effect, but cheap and safe to
+    // write in-band here; it isn't load-bearing for the total.
+    tx.set(activityRef, {
+      kind: "contributed",
+      actorId: uid,
+      at: now,
+      amount,
+    });
+
+    return {posterId, newTotal, bountyTitle: bounty.title};
+  });
+
+  return {ok: true, total: result.newTotal};
+});
+
 /* ── approveBounty ────────────────────────────────────────────────── */
 
 export const approveBounty = onCall(CALLABLE_OPTS, async (req) => {
@@ -356,11 +425,11 @@ export const approveBounty = onCall(CALLABLE_OPTS, async (req) => {
   await requireMembership(groupId, uid);
 
   const bountyRef = db.doc(`groups/${groupId}/bounties/${bountyId}`);
+  const contributionsRef = bountyRef.collection("contributions");
   const leaderboardRef = db.doc(`groups/${groupId}/leaderboard/summary`);
   const activityRef = db
       .collection(`groups/${groupId}/bounties/${bountyId}/activity`)
       .doc();
-  const iouRef = db.collection("ious").doc();
   const now = Timestamp.now();
 
   const result = await db.runTransaction(async (tx) => {
@@ -402,26 +471,75 @@ export const approveBounty = onCall(CALLABLE_OPTS, async (req) => {
       ((lbSnap.data()?.entries as LeaderboardEntry[]) ?? []) :
       [];
 
+    // Pooled contributions (cash only). Read with the other reads so we can fan
+    // out one IOU per contributor below. Empty ⟺ nobody pooled, in which case
+    // we fall back to the single-IOU behaviour using the bounty's own price.
+    const isCustom = bounty.rewardType === "custom";
+    const contribSnap = isCustom ?
+      null : await tx.get(contributionsRef);
+
     /* ── all reads done; now writes ── */
 
-    const newPoints = (member.points ?? 0) + bounty.price;
+    const pts = bountyPoints(bounty);
+    const newPoints = (member.points ?? 0) + pts;
     const newWins = (member.wins ?? 0) + 1;
-    const newUserTotal = userTotal + bounty.price;
+    const newUserTotal = userTotal + pts;
 
     tx.update(bountyRef, {state: "successful", resolvedAt: now});
 
     tx.update(memberRef, {points: newPoints, wins: newWins});
     tx.set(userRef, {totalPoints: newUserTotal}, {merge: true});
 
-    tx.set(iouRef, {
-      groupId,
-      debtorId: bounty.posterId,
-      creditorId: claimantId,
-      amount: bounty.price,
-      bountyId,
-      status: "open",
-      createdAt: now,
-    });
+    // One IOU per debtor, each settling independently (cash or Stripe):
+    //  • Custom reward → a single manual-only IOU carrying the reward text with
+    //    no monetary amount; the Stripe callable refuses to build a PI for it.
+    //  • Pooled cash bounty → one cash IOU per contributor for their own share
+    //    (the poster's stake is just another contributor). A contributor who is
+    //    also the winner is skipped — they don't owe themselves.
+    //  • Cash bounty nobody pooled on (or a legacy doc) → today's single IOU
+    //    for the full price.
+    let posterOwed = bounty.price ?? 0;
+    if (isCustom) {
+      tx.set(db.collection("ious").doc(), {
+        groupId,
+        debtorId: bounty.posterId,
+        creditorId: claimantId,
+        amount: 0,
+        rewardType: "custom",
+        rewardText: bounty.rewardText ?? "",
+        bountyId,
+        status: "open",
+        createdAt: now,
+      });
+    } else if (contribSnap && !contribSnap.empty) {
+      posterOwed = 0;
+      for (const c of contribSnap.docs) {
+        const cData = c.data() as ContributionData;
+        const debtorId = cData.uid ?? c.id;
+        const amount = cData.amount ?? 0;
+        if (amount <= 0 || debtorId === claimantId) continue;
+        if (debtorId === bounty.posterId) posterOwed = amount;
+        tx.set(db.collection("ious").doc(), {
+          groupId,
+          debtorId,
+          creditorId: claimantId,
+          amount,
+          bountyId,
+          status: "open",
+          createdAt: now,
+        });
+      }
+    } else {
+      tx.set(db.collection("ious").doc(), {
+        groupId,
+        debtorId: bounty.posterId,
+        creditorId: claimantId,
+        amount: bounty.price,
+        bountyId,
+        status: "open",
+        createdAt: now,
+      });
+    }
 
     const updatedEntries = upsertLeaderboardEntry(currentEntries, {
       userId: claimantId,
@@ -441,7 +559,12 @@ export const approveBounty = onCall(CALLABLE_OPTS, async (req) => {
     return {
       claimantId,
       posterId: bounty.posterId,
-      price: bounty.price,
+      points: pts,
+      isCustom,
+      // What the poster now owes, phrased for the notification body. With a
+      // pooled bounty the poster owes only their own share; other contributors
+      // get their own IOUs (and their own notification is out of scope here).
+      owed: isCustom ? (bounty.rewardText ?? "the reward") : `$${posterOwed}`,
       bountyTitle: bounty.title,
     };
   });
@@ -454,18 +577,19 @@ export const approveBounty = onCall(CALLABLE_OPTS, async (req) => {
       bountyId,
       actorId: uid,
       actorName: reviewerName,
-      amount: result.price,
+      amount: result.points,
       title: "Claim approved",
-      body: `Your claim on "${result.bountyTitle}" was approved. +${result.price} pts.`,
+      body: `Your claim on "${result.bountyTitle}" was approved. ` +
+        `+${result.points} pts.`,
     }),
     writeInbox(result.posterId, {
       kind: "bounty_resolved",
       groupId,
       bountyId,
       actorId: uid,
-      amount: result.price,
+      amount: result.points,
       title: "Bounty resolved",
-      body: `You approved "${result.bountyTitle}". You now owe $${result.price}.`,
+      body: `You approved "${result.bountyTitle}". You now owe ${result.owed}.`,
     }),
   ]);
 
@@ -537,9 +661,10 @@ export const rejectBounty = onCall(CALLABLE_OPTS, async (req) => {
 
     /* ── all reads done; now writes ── */
 
-    const newPoints = Math.max(0, (member.points ?? 0) - bounty.price);
+    const pts = bountyPoints(bounty);
+    const newPoints = Math.max(0, (member.points ?? 0) - pts);
     const newLosses = (member.losses ?? 0) + 1;
-    const newUserTotal = Math.max(0, userTotal - bounty.price);
+    const newUserTotal = Math.max(0, userTotal - pts);
 
     tx.update(bountyRef, {
       state: "failed",
@@ -573,7 +698,7 @@ export const rejectBounty = onCall(CALLABLE_OPTS, async (req) => {
     return {
       claimantId,
       posterId: bounty.posterId,
-      price: bounty.price,
+      points: pts,
       bountyTitle: bounty.title,
     };
   });
@@ -585,11 +710,11 @@ export const rejectBounty = onCall(CALLABLE_OPTS, async (req) => {
     bountyId,
     actorId: uid,
     actorName: reviewerName,
-    amount: result.price,
+    amount: result.points,
     reason,
     title: "Claim rejected",
     body: `Your claim on "${result.bountyTitle}" was rejected.` +
-      (reason ? ` Reason: ${reason}` : "") + ` -${result.price} pts.`,
+      (reason ? ` Reason: ${reason}` : "") + ` -${result.points} pts.`,
   });
 
   return {ok: true};

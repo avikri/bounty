@@ -23,6 +23,37 @@ test.describe('[K1][P2] mobile (<960px)', () => {
   });
 });
 
+test.describe('[K1b][P1] settings is reachable + usable on mobile (<960px)', () => {
+  // iPhone 12/13-sized viewport.
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('open the mobile group header → settings; content + a control are usable', async ({ page, seed }) => {
+    await signInAndVisit(page, PERSONAS.A, `/g/${seed.groupId}`);
+
+    // The desktop header entry point is hidden on mobile; the gear in the
+    // mobile header is the only way in.
+    await expect(page.getByTestId('group-settings-link')).toBeHidden();
+    const gear = page.getByTestId('group-settings-link-mobile');
+    await expect(gear).toBeVisible();
+    await gear.click();
+
+    await expect(page).toHaveURL(new RegExp(`/g/${seed.groupId}/settings$`));
+
+    // Settings content rendered and an interactive control reachable/usable.
+    await expect(page.getByTestId('invite-code')).toBeVisible();
+    const name = page.locator('input.input').first();
+    await expect(name).toBeVisible();
+    await name.fill('Renamed on mobile');
+    await expect(name).toHaveValue('Renamed on mobile');
+
+    // No horizontal overflow at this width.
+    const overflows = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    );
+    expect(overflows).toBe(false);
+  });
+});
+
 test.describe('[K2][P2] desktop (≥1200px)', () => {
   test.use({ viewport: { width: 1300, height: 900 } });
 
@@ -33,6 +64,16 @@ test.describe('[K2][P2] desktop (≥1200px)', () => {
     await expect(page.getByTestId('tabbar')).toBeHidden();
     await expect(page.getByTestId('bell')).toBeHidden();
     await expect(page.getByTestId('fab-post')).toBeHidden();
+  });
+
+  test('the desktop header Settings link still reaches settings; mobile gear is hidden', async ({ page, seed }) => {
+    await signInAndVisit(page, PERSONAS.A, `/g/${seed.groupId}`);
+    await expect(page.getByTestId('group-settings-link-mobile')).toBeHidden();
+    const link = page.getByTestId('group-settings-link');
+    await expect(link).toBeVisible();
+    await link.click();
+    await expect(page).toHaveURL(new RegExp(`/g/${seed.groupId}/settings$`));
+    await expect(page.getByTestId('invite-code')).toBeVisible();
   });
 });
 

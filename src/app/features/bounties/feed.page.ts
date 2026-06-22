@@ -27,7 +27,13 @@ type FilterKey = 'all' | 'available' | 'claimed' | 'pending_review' | 'mine';
               </h2>
               <div class="sub">{{ g.memberIds.length }} members · {{ activeCount() }} active</div>
             </div>
-            <app-avatar [initials]="me().initials" [variant]="me().avatarVariant" />
+            <div class="topbar-actions">
+              <a class="icon-btn" [routerLink]="['/g', g.id, 'settings']"
+                 data-testid="group-settings-link-mobile" aria-label="Group settings">
+                <app-icon name="settings" [size]="20" />
+              </a>
+              <app-avatar [initials]="me().initials" [variant]="me().avatarVariant" />
+            </div>
           </div>
         </div>
 
@@ -91,7 +97,13 @@ type FilterKey = 'all' | 'available' | 'claimed' | 'pending_review' | 'mine';
     .mobile-head { display: block; }
     .dt-head { display: none; }
 
-    .topbar { display: flex; align-items: center; justify-content: space-between; padding: 4px 4px 12px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 4px 12px; }
+    .topbar-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    .icon-btn {
+      width: 40px; height: 40px; border-radius: 12px;
+      background: var(--bg-3); display: grid; place-items: center;
+      color: var(--ink); flex-shrink: 0;
+    }
     .topbar h2 { font-size: 22px; display: flex; align-items: center; gap: 8px; }
     .topbar .emoji { font-size: 22px; }
     .sub { font-size: 12px; color: var(--muted); font-family: 'JetBrains Mono', monospace; margin-top: 2px; }

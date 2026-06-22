@@ -10,6 +10,8 @@ import {
   AppNotification,
   Bounty,
   BountyState,
+  Comment,
+  Contribution,
   Group,
   IOU,
   Member,
@@ -65,7 +67,8 @@ export interface MemberDoc {
 }
 
 export interface BountyDoc {
-  title: string; description: string; price: number;
+  title: string; description: string; price?: number; currency?: string;
+  rewardType?: 'cash' | 'custom'; rewardText?: string; points?: number;
   state: BountyState; posterId: string; claimantId?: string | null;
   proof?: { urls: string[]; note: string };
   expiresAt: Timestamp; createdAt: Timestamp; resolvedAt?: Timestamp;
@@ -75,8 +78,29 @@ export interface BountyDoc {
 export interface IouDoc {
   groupId: string; debtorId: string; creditorId: string;
   amount: number; bountyId: string;
+  rewardType?: 'cash' | 'custom'; rewardText?: string;
   status: IOU['status']; createdAt: Timestamp;
   settledAt?: Timestamp;
+  currency?: string;
+  paymentMethod?: IOU['paymentMethod'];
+  stripePaymentIntentId?: string;
+  stripeStatus?: string;
+  creditorPayable?: boolean;
+  awaitingCreditorOnboarding?: boolean;
+}
+
+export interface ContributionDoc {
+  uid: string;
+  displayName?: string;
+  amount: number;
+}
+
+export interface CommentDoc {
+  authorUid: string;
+  authorDisplayName: string;
+  text: string;
+  createdAt: Timestamp;
+  editedAt?: Timestamp;
 }
 
 export interface NotificationDoc {
@@ -129,9 +153,18 @@ export function mapMember(uid: string, d: MemberDoc): Member {
 }
 
 export function mapBounty(id: string, groupId: string, d: BountyDoc): Bounty {
+  // Defensive defaults for pre-feature docs: absent rewardType ⇒ cash, and
+  // points falls back to the dollar price (the old 1:1 leaderboard rule).
+  const rewardType = d.rewardType ?? 'cash';
+  const price = d.price ?? 0;
   return {
     id, groupId,
-    title: d.title, description: d.description, price: d.price,
+    title: d.title, description: d.description,
+    rewardType,
+    price,
+    rewardText: d.rewardText,
+    points: d.points ?? price,
+    currency: d.currency,
     state: d.state, posterId: d.posterId, claimantId: d.claimantId ?? null,
     proof: d.proof,
     expiresAt: toDate(d.expiresAt),
@@ -148,6 +181,25 @@ export function mapIou(id: string, d: IouDoc): IOU {
     ...rest,
     createdAt: toDate(createdAt),
     settledAt: settledAt ? toDate(settledAt) : undefined,
+  };
+}
+
+export function mapContribution(id: string, d: ContributionDoc): Contribution {
+  return {
+    uid: d.uid ?? id,
+    displayName: d.displayName || undefined,
+    amount: d.amount ?? 0,
+  };
+}
+
+export function mapComment(id: string, d: CommentDoc): Comment {
+  return {
+    id,
+    authorUid: d.authorUid,
+    authorDisplayName: d.authorDisplayName,
+    text: d.text,
+    createdAt: toDate(d.createdAt),
+    editedAt: d.editedAt ? toDate(d.editedAt) : undefined,
   };
 }
 
